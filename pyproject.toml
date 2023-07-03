@@ -19,7 +19,7 @@ toolz = "^0.12.0"
 array-to-latex = "^0.91"
 
 [tool.poetry.group.dev.dependencies]
-pyright = "^1.1.316"
+pylance = "^0.5.2"
 
 [build-system]
 requires = ["poetry-core"]
