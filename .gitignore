@@ -23,3 +23,8 @@
 **/.ipynb_checkpoints
 
 **/__pypackages__
+
+
+## custom
+.vscode
+.direnv
