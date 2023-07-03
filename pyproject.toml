@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "sponge-networks"
+version = "0.1.0"
+description = "a generalization of the resource network model with greedy vertices"
+authors = ["heinwol <koreshkovhw@yandex.ru>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "sponge_networks"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.25.0"
+scipy = "^1.11.1"
+pandas = "^2.0.3"
+sympy = "^1.12"
+networkx = "^3.1"
+pydot = "^1.4.2"
+toolz = "^0.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pyright = "^1.1.316"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
