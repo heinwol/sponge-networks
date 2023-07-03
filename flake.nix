@@ -12,9 +12,16 @@ rec {
 
       pkgs = nixpkgs.legacyPackages.${system};
 
-      buildInputs = [
-
+      buildInputs = with pkgs; [
+        graphviz
       ];
+
+      overrides = pkgs.poetry2nix.defaultPoetryOverrides.extend
+        (self: super: {
+          clipboard = super.clipboard.overridePythonAttrs (
+            old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ]; }
+          );
+        });
 
       devShells.default = pkgs.mkShell {
         packages = buildInputs ++ [
@@ -22,10 +29,11 @@ rec {
           (pkgs.poetry2nix.mkPoetryEnv {
             projectDir = ./.;
             preferWheels = true; # else it fails
+            inherit overrides;
 
             # for development;
             # TODO: remove runtime dependency
-            extraPackages = (p: [ p.python-lsp-server ]);
+            # extraPackages = (p: [ p.python-lsp-server ]);
           })
         ];
         shellHook = ''
@@ -44,10 +52,10 @@ rec {
     in
     {
       devShells.${system} = devShells;
-      packages.${system} = {
-        inherit sponge-networks;
-        default = sponge-networks;
-        # package-env = package-env.dependencyEnv;
-      };
+      # packages.${system} = {
+      #   inherit sponge-networks;
+      #   default = sponge-networks;
+      #   # package-env = package-env.dependencyEnv;
+      # };
     };
 }
