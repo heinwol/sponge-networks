@@ -1,29 +1,28 @@
-import numpy as np
-from scipy.sparse.linalg import eigs as sparce_eigs
-import pandas as pd
-import sympy as sp
-import networkx as nx
-import pydot
+import itertools
 import multiprocessing
 import operator
-import itertools
-from toolz import *
-from IPython.display import Image, SVG
+from dataclasses import dataclass
 from typing import (
+    Any,
+    Callable,
     Dict,
+    Hashable,
+    Iterable,
+    List,
     Optional,
     Sequence,
-    Callable,
     Tuple,
-    List,
     Union,
-    Iterable,
-    Any,
-    Hashable,
 )
-from dataclasses import dataclass
-from ipywidgets import interact, widgets
+import networkx as nx
+import numpy as np
 import pandas as pd
+import pydot
+import sympy as sp
+from IPython.display import SVG, Image
+from ipywidgets import interact, widgets
+from scipy.sparse.linalg import eigs as sparce_eigs
+from toolz import *
 
 MAX_NODE_WIDTH = 1.1
 

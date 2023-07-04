@@ -1,11 +1,11 @@
-from typing import Tuple
-from toolz import *
-import networkx as nx
+import pickle
 from collections import deque
-import numpy as np
+from typing import Tuple
 import array_to_latex
 import IPython
-import pickle
+import networkx as nx
+import numpy as np
+from toolz import *
 
 
 def draw_weighted(G: nx.DiGraph, prop="weight"):
