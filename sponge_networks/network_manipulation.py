@@ -1,11 +1,8 @@
-import pickle
-from collections import deque
-from typing import Tuple
+# import pickle
 import array_to_latex
-import IPython
+from IPython.core.display import Latex
 import networkx as nx
 import numpy as np
-from toolz import *
 
 
 def draw_weighted(G: nx.DiGraph, prop="weight"):
@@ -29,7 +26,7 @@ def make_random_weights(G: nx.DiGraph, gen=(lambda u, v: np.random.randint(0, 10
 
 def to_latex(a: np.ndarray):
     res = array_to_latex.to_ltx(a, arraytype="pmatrix", frmt="{:.4g}", print_out=False)
-    return IPython.display.Latex(res)
+    return Latex(res)
 
 
 # def pickle

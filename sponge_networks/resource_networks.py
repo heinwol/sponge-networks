@@ -1,150 +1,12 @@
-import itertools
 import multiprocessing
-import operator
-from dataclasses import dataclass
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Hashable,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-)
+from typing import Dict
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
-import pydot
-import sympy as sp
-from IPython.display import SVG, Image
 from ipywidgets import interact, widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
-from toolz import *
-
-MAX_NODE_WIDTH = 1.1
-
-lmap = compose(list, map)
-tmap = compose(tuple, map)
-get = curry(operator.getitem)
-
-
-def _linear_func_from_2_points(
-    p1: Tuple[float, float], p2: Tuple[float, float]
-) -> Callable[[float], float]:
-    if np.allclose(p2[0], p1[0]):
-        if np.allclose(p2[1], p1[1]):
-            return lambda x: p1[1]
-        else:
-            raise ValueError(f"Invalid points for linear function: {p1}, {p2}")
-    else:
-        k = (p2[1] - p1[1]) / (p2[0] - p1[0])
-        b = (p1[1] * p2[0] - p2[1] * p1[0]) / (p2[0] - p1[0])
-        return lambda x: k * x + b
-
-
-def parallelize_range(n_pools, rng):
-    rng = list(rng)
-    total_len = len(rng)
-    size_of_pool = total_len // n_pools + int(bool(total_len % n_pools))
-    return partition_all(size_of_pool, rng)
-
-
-def const_iter(x):
-    while True:
-        yield x
-
-
-Node = Hashable
-FlowMatrix = Sequence[Sequence[Sequence[float]]]
-
-
-class SimpleNodeArrayDescriptor:
-    def __init__(
-        self,
-        val_descriptor: Dict[Hashable, int],
-        arr: Union[np.ndarray, List[Any]],
-        dims_affected: Optional[Tuple[int]] = None,
-    ) -> None:
-        self.val_descriptor = val_descriptor
-        self.arr = arr
-        self.dims_affected = set(
-            dims_affected if dims_affected is not None else range(len(arr.shape))
-        )
-
-    def __getitem__(self, key: Union[int, Tuple[int]]):
-        # [0, 2] => (arr['lala', 5, 1] => arr[desc['lala'], 5, desc[12]])
-        key_ = (key,) if not isinstance(key, tuple) else key
-        new_key = list(key_)
-        for i in range(len(key_)):
-            if i in self.dims_affected:
-                new_key[i] = self.val_descriptor[key_[i]]
-        new_key = tuple(new_key)
-        return self.arr[new_key if len(new_key) != 1 else new_key[0]]
-
-
-@dataclass
-class StateArray:
-    node_descriptor: Dict[Node, int]
-    idx_descriptor: Dict[int, Node]
-    states_arr: np.ndarray
-    flow_arr: np.ndarray
-    total_output_res: List[float]
-
-    def __len__(self) -> int:
-        return len(self.states_arr)
-
-    def __getitem__(self, time: int):
-        return {
-            "states": SimpleNodeArrayDescriptor(
-                self.node_descriptor, self.states_arr[time], (0,)
-            ),
-            "flow": SimpleNodeArrayDescriptor(
-                self.node_descriptor, self.flow_arr[time], (0, 1)
-            ),
-            "total_output_res": SimpleNodeArrayDescriptor(
-                self.node_descriptor, self.total_output_res, (0,)
-            ),
-        }
-
-
-def parallel_plot(G: nx.DiGraph, states: StateArray, rng: List[int]):
-    def my_fmt(x: Union[float, int]) -> str:
-        if isinstance(x, int):
-            return str(x)
-        x_int, x_frac = int(x), x % 1
-        if x_frac < 1e-3 or x >= 1e3:
-            rem = ""
-        else:
-            len_int = len(str(x_int))
-            rem = str(int(x_frac * 10 ** (4 - len_int)))
-            rem = ("0" * (4 - len_int - len(rem)) + rem).rstrip("0")
-        return str(x_int) + "." + rem
-
-    total_sum = states.states_arr[-1].sum()
-    calc_node_width = _linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
-    res = [None] * len(rng)
-    n_it = 0
-    for idx in rng:
-        state = states[idx]
-        for v in G.nodes:
-            if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
-                G.nodes[v]["label"] = my_fmt(state["states"][v])
-                G.nodes[v]["width"] = calc_node_width(state["states"][v])
-
-                G.nodes[v]["fillcolor"] = (
-                    "#f0fff4"
-                    if state["states"][v] < state["total_output_res"][v]
-                    else "#b48ead"
-                )
-
-        for u, v, d in G.edges(data=True):
-            d["label"] = d["weight"]
-        res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
-        n_it += 1
-    return res
+from .utils import *
 
 
 class ResourceDiGraph:
@@ -152,18 +14,17 @@ class ResourceDiGraph:
         if G is None:
             G = nx.DiGraph()
         self.G: nx.DiGraph = G
-        self.node_descriptor: dict[Node, int] = {
+        self.node_descriptor: Dict[Node, int] = {
             node: i for i, node in enumerate(G.nodes)
         }
-        self.idx_descriptor: list[Node] = [None] * len(G.nodes)
+        self.idx_descriptor: List[Node] = [None] * len(G.nodes)
         for node, i in self.node_descriptor.items():
             self.idx_descriptor[i] = node
-
         for u, v, d in G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
-        self.stochastic_matrix = None
-        self.adjacency_matrix = None
+        self.stochastic_matrix: NDarrayT[float] = None
+        self.adjacency_matrix: NDarrayT[float] = None
         self.recalculate_matrices()
 
     def recalculate_matrices(self):
@@ -199,17 +60,6 @@ class ResourceDiGraph:
         else:
             raise RuntimeError(f"strange eigenvectors: {eigvect}")
         return eigvect / eigvect.sum()
-        # state = np.zeros((n,))
-        # state[0] = 1
-        # state_prev = np.zeros((n,))
-        # state_prev[-1] = 1
-        # i = 0
-        # while not np.allclose(state, state_prev, atol=1e-10) and i < 1000:
-        #     state_prev, state = state, state @ self.stochastic_matrix
-        #     i += 1
-        # if i >= 1000:
-        #     raise RuntimeError(f'Maximum iteration number exceeded, {state=}')
-        # return state
 
     def T(self) -> float:
         q1_star = self.one_limit_state()
@@ -226,12 +76,12 @@ class ResourceDiGraph:
         else:
             return {node: x for node, x in zip(self.node_descriptor.keys(), q)}
 
-    def flow(self, q: np.ndarray) -> np.ndarray:
+    def flow(self, q: np.ndarray) -> NDarrayT[float]:
         q = np.asarray(q)
         q = q.reshape((-1, 1))
         return np.minimum(q * self.stochastic_matrix, self.adjacency_matrix)
 
-    def S(self, q: np.ndarray, flow=None) -> np.ndarray:
+    def S(self, q: npt.ArrayLike, flow=None) -> NDarrayT[float]:
         q = np.asarray(q)
         flow = self.flow(q) if flow is None else flow
         return q + flow.sum(axis=0) - flow.sum(axis=1)
