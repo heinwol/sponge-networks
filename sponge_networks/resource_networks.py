@@ -1,5 +1,5 @@
 import multiprocessing
-from typing import Dict
+from typing import Dict, Iterable, cast
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
@@ -7,6 +7,9 @@ import pandas as pd
 from ipywidgets import interact, widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
 from .utils import *
+from toolz import identity, valmap
+
+# from scipy.sparse import sparray
 
 
 class ResourceDiGraph:
@@ -17,21 +20,25 @@ class ResourceDiGraph:
         self.node_descriptor: Dict[Node, int] = {
             node: i for i, node in enumerate(G.nodes)
         }
-        self.idx_descriptor: List[Node] = [None] * len(G.nodes)
+        idx_descriptor: list[Optional[Node]] = [None] * len(G.nodes)
         for node, i in self.node_descriptor.items():
-            self.idx_descriptor[i] = node
+            idx_descriptor[i] = node
+        self.idx_descriptor = cast(List[Node], idx_descriptor)
         for u, v, d in G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
-        self.stochastic_matrix: NDarrayT[float] = None
-        self.adjacency_matrix: NDarrayT[float] = None
+        self.stochastic_matrix: NDarrayT[np.float64]
+        self.adjacency_matrix: NDarrayT[np.float64]
         self.recalculate_matrices()
 
+    # @staticmethod
+    # def _reverse_
+
     def recalculate_matrices(self):
-        M = nx.adjacency_matrix(self.G).toarray()
+        M: NDarrayT[np.float64] = nx.adjacency_matrix(self.G).toarray()
         self.adjacency_matrix = M
         M_sum = M.sum(axis=1).reshape((-1, 1))
-        M_sum = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
+        M_sum: Any = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
         self.stochastic_matrix = M / M_sum
         for i in range(len(M)):
             if M_sum[i] == np.inf:
@@ -51,7 +58,10 @@ class ResourceDiGraph:
             )
         n = len(self.adjacency_matrix)
 
-        eigval, eigvect = sparce_eigs(self.stochastic_matrix.T, k=1, sigma=1.1)
+        eigval, eigvect = cast(
+            Tuple[NDarrayT[np.float64], NDarrayT[np.float64]],
+            sparce_eigs(self.stochastic_matrix.T, k=1, sigma=1.1),
+        )
 
         if not np.allclose(eigval, 1, atol=1e-7):
             raise RuntimeError(f"bad calculation of eigenvalue, it is {eigval}, not 1")
@@ -76,12 +86,12 @@ class ResourceDiGraph:
         else:
             return {node: x for node, x in zip(self.node_descriptor.keys(), q)}
 
-    def flow(self, q: np.ndarray) -> NDarrayT[float]:
+    def flow(self, q: np.ndarray) -> NDarrayT[np.float64]:
         q = np.asarray(q)
         q = q.reshape((-1, 1))
         return np.minimum(q * self.stochastic_matrix, self.adjacency_matrix)
 
-    def S(self, q: npt.ArrayLike, flow=None) -> NDarrayT[float]:
+    def S(self, q: npt.ArrayLike, flow=None) -> NDarrayT[np.float64]:
         q = np.asarray(q)
         flow = self.flow(q) if flow is None else flow
         return q + flow.sum(axis=0) - flow.sum(axis=1)
@@ -98,9 +108,10 @@ class ResourceDiGraph:
         self.node_descriptor: dict[Node, int] = {
             node: i for i, node in enumerate(self.G.nodes)
         }
-        self.idx_descriptor: list[Node] = [None] * len(self.G.nodes)
+        idx_descriptor: Any = [None] * len(self.G.nodes)
         for node, i in self.node_descriptor.items():
-            self.idx_descriptor[i] = node
+            idx_descriptor[i] = node
+        self.idx_descriptor = cast(List[Node], idx_descriptor)
         self.recalculate_matrices()
 
     def run_simulation(
@@ -123,10 +134,12 @@ class ResourceDiGraph:
         for i in range(1, n_iters):
             flow_arr[i] = self.flow(state_arr[i - 1])
             state_arr[i] = self.S(state_arr[i - 1], flow=flow_arr[i])
-        total_output_res: list[float] = [
-            sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
-            for u in self.idx_descriptor
-        ]
+        total_output_res: NDarrayT[np.float64] = np.array(
+            [
+                sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
+                for u in self.idx_descriptor
+            ]
+        )
         return StateArray(
             self.node_descriptor,
             self.idx_descriptor,
@@ -141,12 +154,12 @@ class ResourceDiGraph:
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
         scale=1.0,
     ) -> Sequence[SVG]:
-        G: nx.DiGraph = self.G.copy()
+        G: nx.DiGraph = cast(nx.DiGraph, self.G.copy())
         res = [None] * len(states)
 
-        G.graph["graph"] = {"layout": "neato", "scale": scale}
+        G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
 
-        G.graph["node"] = {
+        G.graph["node"] = {  # type: ignore
             "fontsize": 10,
             "shape": "circle",
             "style": "filled",
@@ -161,7 +174,7 @@ class ResourceDiGraph:
         if np.allclose(max_weight, min_weight):
             calc_edge_width = lambda x: 2.5
         else:
-            calc_edge_width = _linear_func_from_2_points(
+            calc_edge_width = linear_func_from_2_points(
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
@@ -194,7 +207,7 @@ class ResourceDiGraph:
 
         n_pools = min(8, len(states.states_arr))
         pool_obj = multiprocessing.Pool(n_pools)
-        answer = pool_obj.starmap(
+        answer: list[list[Optional[SVG]]] = pool_obj.starmap(
             parallel_plot,
             zip(
                 const_iter(G),
@@ -244,10 +257,15 @@ class ResourceDiGraphWithIncome(ResourceDiGraph):
         for j in range(n):
             state_arr[0, j] = state_dict[self.idx_descriptor[j]]
 
-        total_output_res: list[float] = [
-            sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
-            for u in self.idx_descriptor
-        ]
+        total_output_res = cast(
+            NDarrayT[float],
+            np.array(
+                [
+                    sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
+                    for u in self.idx_descriptor
+                ]
+            ),
+        )
 
         for i in range(1, n_iters):
             income_seq = income_seq_func(i - 1)
@@ -273,7 +291,7 @@ class ResourceDiGraphWithIncome(ResourceDiGraph):
             self.idx_descriptor,
             state_arr,
             flow_arr,
-            total_output_res,
+            np.asarray(total_output_res),
         )
 
 
