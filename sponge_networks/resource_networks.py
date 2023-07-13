@@ -1,5 +1,5 @@
 import multiprocessing
-from typing import Dict, Iterable, cast
+from typing import Iterable, cast
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
@@ -17,13 +17,13 @@ class ResourceDiGraph:
         if G is None:
             G = nx.DiGraph()
         self.G: nx.DiGraph = G
-        self.node_descriptor: Dict[Node, int] = {
+        self.node_descriptor: dict[Node, int] = {
             node: i for i, node in enumerate(G.nodes)
         }
         idx_descriptor: list[Optional[Node]] = [None] * len(G.nodes)
         for node, i in self.node_descriptor.items():
             idx_descriptor[i] = node
-        self.idx_descriptor = cast(List[Node], idx_descriptor)
+        self.idx_descriptor = cast(list[Node], idx_descriptor)
         for u, v, d in G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
@@ -59,7 +59,7 @@ class ResourceDiGraph:
         n = len(self.adjacency_matrix)
 
         eigval, eigvect = cast(
-            Tuple[NDarrayT[np.float64], NDarrayT[np.float64]],
+            tuple[NDarrayT[np.float64], NDarrayT[np.float64]],
             sparce_eigs(self.stochastic_matrix.T, k=1, sigma=1.1),
         )
 
@@ -79,8 +79,8 @@ class ResourceDiGraph:
         return min_
 
     def _state_to_normal_form(
-        self, q: Union[Dict[Node, float], List[float]]
-    ) -> Dict[Node, float]:
+        self, q: Union[dict[Node, float], list[float]]
+    ) -> dict[Node, float]:
         if isinstance(q, dict):
             return q
         else:
@@ -99,7 +99,7 @@ class ResourceDiGraph:
     def __len__(self):
         return len(self.adjacency_matrix)
 
-    def add_weighted_edges_from(self, edge_bunch: Iterable[Tuple[Node, Node, float]]):
+    def add_weighted_edges_from(self, edge_bunch: Iterable[tuple[Node, Node, float]]):
         def to_expected_form(it):
             return (it[0], it[1], {"weight": it[2]})
 
@@ -111,11 +111,11 @@ class ResourceDiGraph:
         idx_descriptor: Any = [None] * len(self.G.nodes)
         for node, i in self.node_descriptor.items():
             idx_descriptor[i] = node
-        self.idx_descriptor = cast(List[Node], idx_descriptor)
+        self.idx_descriptor = cast(list[Node], idx_descriptor)
         self.recalculate_matrices()
 
     def run_simulation(
-        self, initial_state: Union[Dict[Node, float], List[float]], n_iters=30
+        self, initial_state: Union[dict[Node, float], list[float]], n_iters=30
     ) -> StateArray:
         if len(initial_state) != len(self.G.nodes):
             raise ValueError(
@@ -153,7 +153,7 @@ class ResourceDiGraph:
         states: StateArray,
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
         scale=1.0,
-    ) -> Sequence[SVG]:
+    ) -> list[SVG]:
         G: nx.DiGraph = cast(nx.DiGraph, self.G.copy())
         res = [None] * len(states)
 
@@ -207,7 +207,7 @@ class ResourceDiGraph:
 
         n_pools = min(8, len(states.states_arr))
         pool_obj = multiprocessing.Pool(n_pools)
-        answer: list[list[Optional[SVG]]] = pool_obj.starmap(
+        answer: list[list[SVG]] = pool_obj.starmap(
             parallel_plot,
             zip(
                 const_iter(G),
@@ -215,12 +215,12 @@ class ResourceDiGraph:
                 parallelize_range(n_pools, range(len(res))),
             ),
         )
-        return np.concatenate(answer)
+        return cast(list[SVG], np.concatenate(cast(NDarrayT[SVG], answer)))
 
     def plot(self):
         G = self.G.copy()
 
-        G.graph["graph"] = {"layout": "neato", "scale": 1.7}
+        G.graph["graph"] = {"layout": "neato", "scale": 1.7}  # type: ignore
 
         for u, v in G.edges:
             G.edges[u, v]["label"] = G.edges[u, v]["weight"]
@@ -230,9 +230,9 @@ class ResourceDiGraph:
 class ResourceDiGraphWithIncome(ResourceDiGraph):
     def run_simulation(
         self,
-        initial_state: Union[Dict[Node, float], List[float]],
+        initial_state: Union[dict[Node, float], list[float]],
         n_iters=30,
-        income_seq_func: Callable[[int], List[float]] = None,
+        income_seq_func: Optional[Callable[[int], list[float]]] = None,
     ) -> StateArray:
         if len(initial_state) != len(self.G.nodes):
             raise ValueError(
@@ -315,7 +315,7 @@ def simple_protocol(sim: StateArray):
     n_iters = len(sim)
     vertices = lmap(get(sim.idx_descriptor), range(len(sim.idx_descriptor)))
     cols = ["t"] + vertices
-    data = [None] * n_iters
+    data: list[Any] = [None] * n_iters
     for i in range(n_iters):
         data[i] = [i] + lmap(get(sim[i]["states"]), vertices)
     df = pd.DataFrame(columns=cols, data=data)

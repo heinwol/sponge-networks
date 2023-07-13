@@ -7,54 +7,71 @@ from typing import (
     Hashable,
     Iterable,
     Iterator,
-    List,
-    Mapping,
     Optional,
+    Protocol,
     Sequence,
-    Tuple,
+    Sized,
     TypeAlias,
     TypeVar,
     TypedDict,
     Union,
     cast,
+    overload,
 )
 
 import networkx as nx
 import numpy as np
 from IPython.core.display import SVG, Image
 import toolz
-from toolz import curry, compose, partition_all
+from toolz import curry, partition_all
+
+MAX_NODE_WIDTH = 1.1
 
 AnyFloat: TypeAlias = Union[float, np.float64]
 Node: TypeAlias = Hashable
 FlowMatrix: TypeAlias = Sequence[Sequence[Sequence[float]]]
-# Dims = TypeVarTuple("Dims", bound=int)
-# Dtype = TypeVar("Dtype", bound=np.dtype)
-# NDarrayShaped = np.ndarray[Any, np.dtype[Dtype]]
 T = TypeVar("T", bound=Any)
 T1 = TypeVar("T1", bound=Any)
 T2 = TypeVar("T2", bound=Any)
 ValT = TypeVar("ValT", bound=Any)
-# NDarrayT[np.float64]: TypeAlias = np.ndarray[Any, np.dtype[np.float64]]
-# NDarrayAny: TypeAlias = np.ndarray[Any, np.dtype[Any]]
+K = TypeVar("K", bound=Any, contravariant=True)
+V = TypeVar("V", bound=Any, covariant=True)
 NDarrayT = np.ndarray[Any, np.dtype[T]]
 
-MAX_NODE_WIDTH = 1.1
 
-
-def lmap(f: Callable[[T1], T2], x: Iterable[T1]) -> List[T2]:
+def lmap(f: Callable[[T1], T2], x: Iterable[T1]) -> list[T2]:
     return list(map(f, x))
 
 
-def tmap(f: Callable[[T1], T2], x: Iterable[T1]) -> Tuple[T2, ...]:
+def tmap(f: Callable[[T1], T2], x: Iterable[T1]) -> tuple[T2, ...]:
     return tuple(map(f, x))
 
 
-get = curry(getitem)
+class SupportsGetItem(Protocol[K, V]):
+    def __getitem__(self, key: K, /) -> V:
+        ...
+
+    def __len__(self) -> int:
+        ...
+
+
+@overload
+def get(container: SupportsGetItem[K, V]) -> Callable[[K], V]:
+    ...
+
+
+@overload
+def get(container: SupportsGetItem[K, V], key: K) -> V:
+    ...
+
+
+def get(*args, **kwargs):
+    _get = curry(getitem)
+    return _get(*args, **kwargs)
 
 
 def linear_func_from_2_points(
-    p1: Tuple[float, float], p2: Tuple[float, float]
+    p1: tuple[float, float], p2: tuple[float, float]
 ) -> Callable[[float], float]:
     if np.allclose(p2[0], p1[0]):
         if np.allclose(p2[1], p1[1]):
@@ -67,7 +84,7 @@ def linear_func_from_2_points(
         return lambda x: k * x + b
 
 
-def parallelize_range(n_pools: int, rng: range) -> Iterator[Tuple[int, ...]]:
+def parallelize_range(n_pools: int, rng: range) -> Iterator[tuple[int, ...]]:
     rng_ = list(rng)
     total_len = len(rng_)
     size_of_pool = total_len // n_pools + int(bool(total_len % n_pools))
@@ -82,9 +99,9 @@ def const_iter(x: T) -> Iterator[T]:
 class SimpleNodeArrayDescriptor(Generic[ValT]):
     def __init__(
         self,
-        val_descriptor: Mapping[Hashable, int],
+        val_descriptor: SupportsGetItem[Hashable, int],
         arr: NDarrayT[ValT],
-        dims_affected: Optional[Tuple[int, ...]] = None,
+        dims_affected: Optional[tuple[int, ...]] = None,
     ):
         self.val_descriptor = val_descriptor
         self.arr = arr
@@ -92,8 +109,11 @@ class SimpleNodeArrayDescriptor(Generic[ValT]):
             dims_affected if dims_affected is not None else range(len(arr.shape))
         )
 
+    def __len__(self) -> int:
+        return len(self.arr)
+
     def __getitem__(
-        self, key: Union[int, Tuple[int, ...]]
+        self, key: Union[int, tuple[int, ...]]
     ) -> Union[NDarrayT[ValT], ValT]:
         # [0, 2] => (arr['lala', 5, 1] => arr[desc['lala'], 5, desc[12]])
         key_ = (key,) if not isinstance(key, tuple) else key
@@ -117,8 +137,8 @@ StateArraySlice = TypedDict(
 
 @dataclass
 class StateArray:
-    node_descriptor: Mapping[Node, int]
-    idx_descriptor: Union[List[Node], Mapping[int, Node]]
+    node_descriptor: SupportsGetItem[Node, int]
+    idx_descriptor: SupportsGetItem[int, Node]
     states_arr: NDarrayT[np.float64]  # N x M
     flow_arr: NDarrayT[np.float64]  # N x M x M
     total_output_res: NDarrayT[np.float64]  # M
@@ -140,7 +160,7 @@ class StateArray:
         }
 
 
-def parallel_plot(G: nx.DiGraph, states: StateArray, rng: List[int]) -> List[SVG]:
+def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list[SVG]:
     def my_fmt(x: Union[AnyFloat, int]) -> str:
         if isinstance(x, int):
             return str(x)
@@ -155,7 +175,7 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: List[int]) -> List[SVG
 
     total_sum = states.states_arr[-1].sum()
     calc_node_width = linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
-    res: List[Optional[SVG]] = [None] * len(rng)
+    res: list[Optional[SVG]] = [None] * len(rng)
     n_it = 0
     for idx in rng:
         state = states[idx]
@@ -174,4 +194,4 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: List[int]) -> List[SVG
             d["label"] = d["weight"]
         res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
         n_it += 1
-    return cast(List[SVG], res)
+    return cast(list[SVG], res)
