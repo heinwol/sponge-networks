@@ -10,7 +10,6 @@ from typing import (
     Optional,
     Protocol,
     Sequence,
-    Sized,
     TypeAlias,
     TypeVar,
     TypedDict,
@@ -21,8 +20,8 @@ from typing import (
 
 import networkx as nx
 import numpy as np
-from IPython.core.display import SVG, Image
-import toolz
+from IPython.core.display import SVG
+
 from toolz import curry, partition_all
 
 MAX_NODE_WIDTH = 1.1
@@ -47,7 +46,7 @@ def tmap(f: Callable[[T1], T2], x: Iterable[T1]) -> tuple[T2, ...]:
     return tuple(map(f, x))
 
 
-class SupportsGetItem(Protocol[K, V]):
+class TypedMapping(Protocol[K, V]):
     def __getitem__(self, key: K, /) -> V:
         ...
 
@@ -56,12 +55,12 @@ class SupportsGetItem(Protocol[K, V]):
 
 
 @overload
-def get(container: SupportsGetItem[K, V]) -> Callable[[K], V]:
+def get(container: TypedMapping[K, V]) -> Callable[[K], V]:
     ...
 
 
 @overload
-def get(container: SupportsGetItem[K, V], key: K) -> V:
+def get(container: TypedMapping[K, V], key: K) -> V:
     ...
 
 
@@ -99,7 +98,7 @@ def const_iter(x: T) -> Iterator[T]:
 class SimpleNodeArrayDescriptor(Generic[ValT]):
     def __init__(
         self,
-        val_descriptor: SupportsGetItem[Hashable, int],
+        val_descriptor: TypedMapping[Hashable, int],
         arr: NDarrayT[ValT],
         dims_affected: Optional[tuple[int, ...]] = None,
     ):
@@ -137,8 +136,8 @@ StateArraySlice = TypedDict(
 
 @dataclass
 class StateArray:
-    node_descriptor: SupportsGetItem[Node, int]
-    idx_descriptor: SupportsGetItem[int, Node]
+    node_descriptor: TypedMapping[Node, int]
+    idx_descriptor: TypedMapping[int, Node]
     states_arr: NDarrayT[np.float64]  # N x M
     flow_arr: NDarrayT[np.float64]  # N x M x M
     total_output_res: NDarrayT[np.float64]  # M

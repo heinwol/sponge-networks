@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 
 
-def draw_weighted(G: nx.DiGraph, prop="weight"):
+def draw_weighted(G: nx.DiGraph, prop: str = "weight"):
     pos = nx.spring_layout(G, iterations=150)
     if prop:
         edge_labels = {

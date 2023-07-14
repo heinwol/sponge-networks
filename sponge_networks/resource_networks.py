@@ -6,7 +6,7 @@ import numpy.typing as npt
 import pandas as pd
 from ipywidgets import interact, widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
-from .utils import *
+from .utils.utils import *
 from toolz import identity, valmap
 
 # from scipy.sparse import sparray
