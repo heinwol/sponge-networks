@@ -19,6 +19,9 @@
 # venvs
 .venv
 
+# testing
+**/.pytest_cache
+
 # Jupyter Notebook
 **/.ipynb_checkpoints
 
