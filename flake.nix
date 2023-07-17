@@ -28,6 +28,7 @@ rec {
           pkgs.poetry
           (pkgs.poetry2nix.mkPoetryEnv {
             projectDir = ./.;
+            python = pkgs.python311;
             preferWheels = true; # else it fails
             inherit overrides;
 
