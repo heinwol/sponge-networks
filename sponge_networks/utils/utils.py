@@ -136,7 +136,7 @@ StateArraySlice = TypedDict(
 
 @dataclass
 class StateArray:
-    node_descriptor: TypedMapping[Node, int]
+    node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
     states_arr: NDarrayT[np.float64]  # N x M
     flow_arr: NDarrayT[np.float64]  # N x M x M
