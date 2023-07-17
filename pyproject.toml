@@ -5,10 +5,7 @@ description = "a generalization of the resource network model with greedy vertic
 authors = ["heinwol <koreshkovhw@yandex.ru>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "sponge_networks"}]
-include = [
-  "tests/**/*"  
-]
+packages = [{ include = "sponge_networks" }]
 
 
 [tool.poetry.dependencies]
@@ -34,7 +31,7 @@ pytest = "^7.4.0"
 
 
 [tool.pytest.ini_options]
-testpaths = [ "tests" ]
+testpaths = ["tests"]
 
 
 [build-system]
