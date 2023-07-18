@@ -20,6 +20,7 @@ from typing import (
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 from IPython.core.display import SVG
 
 from toolz import curry, partition_all
@@ -157,6 +158,16 @@ class StateArray:
                 self.node_descriptor, self.total_output_res, (0,)
             ),
         }
+
+    def simple_protocol(self):
+        n_iters = len(self)
+        vertices = lmap(get(self.idx_descriptor), range(len(self.idx_descriptor)))
+        cols = ["t"] + vertices
+        data: list[Any] = [None] * n_iters
+        for i in range(n_iters):
+            data[i] = [i] + lmap(get(self[i]["states"]), vertices)
+        df = pd.DataFrame(columns=cols, data=data)
+        return df.set_index("t")
 
 
 def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list[SVG]:

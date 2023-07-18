@@ -3,7 +3,6 @@ from typing import Iterable, cast
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
-import pandas as pd
 from ipywidgets import interact, widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
 from .utils.utils import *
@@ -309,14 +308,3 @@ def plot_simulation(G, simulation, scale=1.0):
         ),
     )
     return None
-
-
-def simple_protocol(sim: StateArray):
-    n_iters = len(sim)
-    vertices = lmap(get(sim.idx_descriptor), range(len(sim.idx_descriptor)))
-    cols = ["t"] + vertices
-    data: list[Any] = [None] * n_iters
-    for i in range(n_iters):
-        data[i] = [i] + lmap(get(sim[i]["states"]), vertices)
-    df = pd.DataFrame(columns=cols, data=data)
-    return df.set_index("t")

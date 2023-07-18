@@ -3,6 +3,5 @@ from .resource_networks import (
     ResourceDiGraph,
     ResourceDiGraphWithIncome,
     plot_simulation,
-    simple_protocol,
 )
 from . import utils
