@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from operator import getitem
+from typing_extensions import override
 from typing import (
     Any,
     Callable,

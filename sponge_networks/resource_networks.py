@@ -227,6 +227,7 @@ class ResourceDiGraph:
 
 
 class ResourceDiGraphWithIncome(ResourceDiGraph):
+    @override
     def run_simulation(
         self,
         initial_state: Union[dict[Node, float], list[float]],
