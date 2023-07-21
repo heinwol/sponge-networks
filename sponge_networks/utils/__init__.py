@@ -1,5 +1,4 @@
 from .utils import (
-    MAX_NODE_WIDTH,
     AnyFloat,
     FlowMatrix,
     NDarrayT,
@@ -9,4 +8,5 @@ from .utils import (
     StateArraySlice,
     TypedMapping,
     parallel_plot,
+    DescriptorPair,
 )

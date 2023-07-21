@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from operator import getitem
 from typing_extensions import override
 from typing import (
+    Annotated,
     Any,
     Callable,
     Generic,
@@ -17,6 +18,7 @@ from typing import (
     Union,
     cast,
     overload,
+    Self,
 )
 
 import networkx as nx
@@ -26,9 +28,7 @@ from IPython.core.display import SVG
 
 from toolz import curry, partition_all
 
-MAX_NODE_WIDTH = 1.1
-
-AnyFloat: TypeAlias = Union[float, np.float64]
+AnyFloat: TypeAlias = np.floating
 Node: TypeAlias = Hashable
 FlowMatrix: TypeAlias = Sequence[Sequence[Sequence[float]]]
 T = TypeVar("T", bound=Any)
@@ -38,6 +38,7 @@ ValT = TypeVar("ValT", bound=Any)
 K = TypeVar("K", bound=Any, contravariant=True)
 V = TypeVar("V", bound=Any, covariant=True)
 NDarrayT = np.ndarray[Any, np.dtype[T]]
+Mutated = Annotated[T, "this variable is subject to change"]
 
 
 def lmap(f: Callable[[T1], T2], x: Iterable[T1]) -> list[T2]:
@@ -97,6 +98,15 @@ def const_iter(x: T) -> Iterator[T]:
         yield x
 
 
+DescriptorPair = TypedDict(
+    "DescriptorPair",
+    {
+        "node_descriptor": dict[Node, int],
+        "idx_descriptor": TypedMapping[int, Node],
+    },
+)
+
+
 class SimpleNodeArrayDescriptor(Generic[ValT]):
     def __init__(
         self,
@@ -129,9 +139,9 @@ class SimpleNodeArrayDescriptor(Generic[ValT]):
 StateArraySlice = TypedDict(
     "StateArraySlice",
     {
-        "states": SimpleNodeArrayDescriptor[np.float64],
-        "flow": SimpleNodeArrayDescriptor[np.float64],
-        "total_output_res": SimpleNodeArrayDescriptor[np.float64],
+        "states": SimpleNodeArrayDescriptor[AnyFloat],
+        "flow": SimpleNodeArrayDescriptor[AnyFloat],
+        "total_output_res": SimpleNodeArrayDescriptor[AnyFloat],
     },
 )
 
@@ -140,9 +150,9 @@ StateArraySlice = TypedDict(
 class StateArray:
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
-    states_arr: NDarrayT[np.float64]  # N x M
-    flow_arr: NDarrayT[np.float64]  # N x M x M
-    total_output_res: NDarrayT[np.float64]  # M
+    states_arr: NDarrayT[AnyFloat]  # N x M
+    flow_arr: NDarrayT[AnyFloat]  # N x M x M
+    total_output_res: NDarrayT[AnyFloat]  # M
 
     def __len__(self) -> int:
         return len(self.states_arr)
@@ -192,7 +202,7 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list
         state = states[idx]
         for v in G.nodes:
             if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
-                G.nodes[v]["label"] = my_fmt(cast(float, state["states"][v]))
+                G.nodes[v]["label"] = my_fmt(cast(AnyFloat, state["states"][v]))
                 G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][v]))
 
                 G.nodes[v]["fillcolor"] = (

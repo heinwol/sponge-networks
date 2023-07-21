@@ -6,15 +6,6 @@ from sponge_networks.resource_networks import *
 from sponge_networks.network_manipulation import *
 from sponge_networks.utils.utils import *
 
-
-DescriptorPair = TypedDict(
-    "DescriptorPair",
-    {
-        "node_descriptor": dict[Node, int],
-        "idx_descriptor": TypedMapping[int, Node],
-    },
-)
-
 ProtocolPair = TypedDict(
     "ProtocolPair",
     {
@@ -24,9 +15,9 @@ ProtocolPair = TypedDict(
 )
 
 
-def resourceDiGraph_from_array(arr: npt.ArrayLike) -> ResourceDiGraph:
+def resourceDiGraph_from_array(arr: npt.ArrayLike) -> ResourceNetwork:
     ig = np.asarray(arr)
-    rn = ResourceDiGraph(nx.from_numpy_array(ig, create_using=nx.DiGraph))
+    rn = ResourceNetwork(nx.from_numpy_array(ig, create_using=nx.DiGraph))
     return rn
 
 

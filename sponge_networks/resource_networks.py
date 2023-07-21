@@ -11,30 +11,38 @@ from toolz import identity, valmap
 # from scipy.sparse import sparray
 
 
-class ResourceDiGraph:
+class ResourceNetwork:
     def __init__(self, G: Optional[nx.DiGraph] = None):
         if G is None:
             G = nx.DiGraph()
         self.G: nx.DiGraph = G
-        self.node_descriptor: dict[Node, int] = {
-            node: i for i, node in enumerate(G.nodes)
-        }
-        idx_descriptor: list[Optional[Node]] = [None] * len(G.nodes)
-        for node, i in self.node_descriptor.items():
-            idx_descriptor[i] = node
-        self.idx_descriptor = cast(list[Node], idx_descriptor)
+        self.node_descriptor, self.idx_descriptor = ResourceNetwork._descriptor_pair(
+            G.nodes
+        )
         for u, v, d in G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
-        self.stochastic_matrix: NDarrayT[np.float64]
-        self.adjacency_matrix: NDarrayT[np.float64]
+        self.stochastic_matrix: NDarrayT[AnyFloat]
+        self.adjacency_matrix: NDarrayT[AnyFloat]
         self.recalculate_matrices()
 
-    # @staticmethod
-    # def _reverse_
+    @staticmethod
+    def _descriptor_pair(
+        nodes: nx.reportviews.NodeView,
+    ) -> tuple[dict[Node, int], list[Node]]:
+        """
+        Beware:
+        the first returned value is node descriptor,
+        the second is index descriptor
+        """
+        node_descriptor: dict[Node, int] = {node: i for i, node in enumerate(nodes)}
+        idx_descriptor: list[Node] = [None] * len(nodes)  # typing: ignore
+        for node, i in node_descriptor.items():
+            idx_descriptor[i] = node
+        return (node_descriptor, idx_descriptor)
 
-    def recalculate_matrices(self):
-        M: NDarrayT[np.float64] = nx.adjacency_matrix(self.G).toarray()
+    def recalculate_matrices(self: Mutated[Self]):
+        M: NDarrayT[AnyFloat] = nx.adjacency_matrix(self.G).toarray()
         self.adjacency_matrix = M
         M_sum = M.sum(axis=1).reshape((-1, 1))
         M_sum: Any = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
@@ -42,15 +50,14 @@ class ResourceDiGraph:
         for i in range(len(M)):
             if M_sum[i] == np.inf:
                 self.stochastic_matrix[i, i] = 1
-        # print(self.stochastic_matrix)
 
-    def r_in(self) -> np.ndarray:
+    def r_in(self) -> NDarrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=0)
 
-    def r_out(self) -> np.ndarray:
+    def r_out(self) -> NDarrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=1)
 
-    def one_limit_state(self) -> np.ndarray:
+    def one_limit_state(self) -> NDarrayT[AnyFloat]:
         if not nx.is_aperiodic(self.G):
             raise ValueError(
                 "Graph must be aperiodic for calculation of one limit state"
@@ -58,7 +65,7 @@ class ResourceDiGraph:
         n = len(self.adjacency_matrix)
 
         eigval, eigvect = cast(
-            tuple[NDarrayT[np.float64], NDarrayT[np.float64]],
+            tuple[NDarrayT[AnyFloat], NDarrayT[AnyFloat]],
             sparce_eigs(self.stochastic_matrix.T, k=1, sigma=1.1),
         )
 
@@ -85,12 +92,14 @@ class ResourceDiGraph:
         else:
             return {node: x for node, x in zip(self.node_descriptor.keys(), q)}
 
-    def flow(self, q: np.ndarray) -> NDarrayT[np.float64]:
+    def flow(self, q: NDarrayT[AnyFloat]) -> NDarrayT[AnyFloat]:
         q = np.asarray(q)
         q = q.reshape((-1, 1))
         return np.minimum(q * self.stochastic_matrix, self.adjacency_matrix)
 
-    def S(self, q: npt.ArrayLike, flow=None) -> NDarrayT[np.float64]:
+    def S(
+        self, q: npt.ArrayLike, flow: Optional[NDarrayT[AnyFloat]] = None
+    ) -> NDarrayT[AnyFloat]:
         q = np.asarray(q)
         flow = self.flow(q) if flow is None else flow
         return q + flow.sum(axis=0) - flow.sum(axis=1)
@@ -104,17 +113,14 @@ class ResourceDiGraph:
 
         self.G.add_edges_from(map(to_expected_form, edge_bunch))
 
-        self.node_descriptor: dict[Node, int] = {
-            node: i for i, node in enumerate(self.G.nodes)
-        }
-        idx_descriptor: Any = [None] * len(self.G.nodes)
-        for node, i in self.node_descriptor.items():
-            idx_descriptor[i] = node
-        self.idx_descriptor = cast(list[Node], idx_descriptor)
+        self.node_descriptor, self.idx_descriptor = ResourceNetwork._descriptor_pair(
+            self.G.nodes
+        )
+
         self.recalculate_matrices()
 
     def run_simulation(
-        self, initial_state: Union[dict[Node, float], list[float]], n_iters=30
+        self, initial_state: Union[dict[Node, float], list[float]], n_iters: int = 30
     ) -> StateArray:
         if len(initial_state) != len(self.G.nodes):
             raise ValueError(
@@ -133,7 +139,7 @@ class ResourceDiGraph:
         for i in range(1, n_iters):
             flow_arr[i] = self.flow(state_arr[i - 1])
             state_arr[i] = self.S(state_arr[i - 1], flow=flow_arr[i])
-        total_output_res: NDarrayT[np.float64] = np.array(
+        total_output_res: NDarrayT[AnyFloat] = np.array(
             [
                 sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
                 for u in self.idx_descriptor
@@ -151,7 +157,8 @@ class ResourceDiGraph:
         self,
         states: StateArray,
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-        scale=1.0,
+        scale: float = 1.0,
+        max_node_width: float = 1.1,
     ) -> list[SVG]:
         G: nx.DiGraph = cast(nx.DiGraph, self.G.copy())
         res = [None] * len(states)
@@ -191,7 +198,7 @@ class ResourceDiGraph:
                 "color": "transparent",
                 "fillcolor": "transparent",
                 "tooltip": str(v),
-                "width": MAX_NODE_WIDTH,
+                "width": max_node_width,
             }
         G.add_nodes_from(void_node_dict.items())
 
@@ -226,12 +233,12 @@ class ResourceDiGraph:
         return SVG(nx.nx_pydot.to_pydot(G).create_svg())
 
 
-class ResourceDiGraphWithIncome(ResourceDiGraph):
+class ResourceNetworkWithIncome(ResourceNetwork):
     @override
     def run_simulation(
         self,
         initial_state: Union[dict[Node, float], list[float]],
-        n_iters=30,
+        n_iters: int = 30,
         income_seq_func: Optional[Callable[[int], list[float]]] = None,
     ) -> StateArray:
         if len(initial_state) != len(self.G.nodes):
@@ -295,7 +302,7 @@ class ResourceDiGraphWithIncome(ResourceDiGraph):
         )
 
 
-def plot_simulation(G, simulation, scale=1.0):
+def plot_simulation(G: ResourceNetwork, simulation: StateArray, scale: float = 1.0):
     pl = G.plot_with_states(simulation, scale=scale)
     f = lambda i: pl[i]
     interact(
@@ -308,4 +315,3 @@ def plot_simulation(G, simulation, scale=1.0):
             description="№ of iteration",
         ),
     )
-    return None
