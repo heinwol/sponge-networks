@@ -10,6 +10,8 @@ from toolz import identity, valmap
 
 # from scipy.sparse import sparray
 
+ResourceNetworkType = TypeVar("ResourceNetworkType", bound=type["ResourceNetwork"])
+
 
 class ResourceNetwork:
     def __init__(self, G: Optional[nx.DiGraph] = None):
@@ -50,6 +52,9 @@ class ResourceNetwork:
         for i in range(len(M)):
             if M_sum[i] == np.inf:
                 self.stochastic_matrix[i, i] = 1
+
+    def to_child(self, cls: ResourceNetworkType) -> ResourceNetworkType:
+        return cls(self.G)
 
     def r_in(self) -> NDarrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=0)
