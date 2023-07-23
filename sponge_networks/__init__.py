@@ -4,4 +4,5 @@ from .resource_networks import (
     ResourceNetworkWithIncome,
     plot_simulation,
 )
+from .sponge_networks import ResourceNetworkGreedy
 from . import utils
