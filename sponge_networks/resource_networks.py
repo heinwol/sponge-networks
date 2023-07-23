@@ -17,34 +17,34 @@ class ResourceNetwork:
     def __init__(self, G: Optional[nx.DiGraph] = None):
         if G is None:
             G = nx.DiGraph()
-        self.G: nx.DiGraph = G
+        self._G: nx.DiGraph = G.copy()  # type: ignore
         self.node_descriptor, self.idx_descriptor = ResourceNetwork._descriptor_pair(
-            G.nodes
+            self._G.nodes
         )
-        for u, v, d in G.edges(data=True):
+        for u, v, d in self._G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
         self.stochastic_matrix: NDarrayT[AnyFloat]
         self.adjacency_matrix: NDarrayT[AnyFloat]
-        self.recalculate_matrices()
+        self._recalculate_matrices()
 
     @staticmethod
     def _descriptor_pair(
         nodes: nx.reportviews.NodeView,
     ) -> tuple[dict[Node, int], list[Node]]:
         """
-        Beware:
+        ## Warning:
         the first returned value is node descriptor,
         the second is index descriptor
         """
         node_descriptor: dict[Node, int] = {node: i for i, node in enumerate(nodes)}
-        idx_descriptor: list[Node] = [None] * len(nodes)  # typing: ignore
+        idx_descriptor: list[Node] = [None] * len(nodes)  # type: ignore
         for node, i in node_descriptor.items():
             idx_descriptor[i] = node
         return (node_descriptor, idx_descriptor)
 
-    def recalculate_matrices(self: Mutated[Self]):
-        M: NDarrayT[AnyFloat] = nx.adjacency_matrix(self.G).toarray()
+    def _recalculate_matrices(self: Mutated[Self]):
+        M: NDarrayT[AnyFloat] = nx.adjacency_matrix(self._G).toarray()
         self.adjacency_matrix = M
         M_sum = M.sum(axis=1).reshape((-1, 1))
         M_sum: Any = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
@@ -53,8 +53,18 @@ class ResourceNetwork:
             if M_sum[i] == np.inf:
                 self.stochastic_matrix[i, i] = 1
 
+    @property
+    def G(self) -> nx.DiGraph:
+        """
+        ## Warning:
+        a copy of the underlying graph is returned,
+        all operations on the result will have no effect on
+        the ResourceNetwork instance
+        """
+        return self._G.copy()  # type: ignore
+
     def to_child(self, cls: ResourceNetworkType) -> ResourceNetworkType:
-        return cls(self.G)
+        return cls(self._G)
 
     def r_in(self) -> NDarrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=0)
@@ -63,7 +73,7 @@ class ResourceNetwork:
         return self.adjacency_matrix.sum(axis=1)
 
     def one_limit_state(self) -> NDarrayT[AnyFloat]:
-        if not nx.is_aperiodic(self.G):
+        if not nx.is_aperiodic(self._G):
             raise ValueError(
                 "Graph must be aperiodic for calculation of one limit state"
             )
@@ -112,25 +122,37 @@ class ResourceNetwork:
     def __len__(self):
         return len(self.adjacency_matrix)
 
-    def add_weighted_edges_from(self, edge_bunch: Iterable[tuple[Node, Node, float]]):
-        def to_expected_form(it):
-            return (it[0], it[1], {"weight": it[2]})
+    def altered(self, f: Callable[[nx.DiGraph], Optional[nx.DiGraph]]) -> Self:
+        """
+        This function provides the only interface to modify the underlying graph.
+        If you want to get a copy of the graph, refer to the
+        `ResourceNetwork.G` property
 
-        self.G.add_edges_from(map(to_expected_form, edge_bunch))
+        Function `f` should either modify the graph in place and return None
+        or return `networkx.DiGraph` which is supposed to be changed
 
-        self.node_descriptor, self.idx_descriptor = ResourceNetwork._descriptor_pair(
-            self.G.nodes
-        )
+        """
 
-        self.recalculate_matrices()
+        G = self.G
+        result = f(G)
+        if result is None:
+            return type(self)(G)
+        elif not isinstance(result, nx.DiGraph):
+            raise ValueError(
+                f"""the input function {f} was supposed to return networkx.DiGraph,
+                however it returned type '{type(result)}'
+                with value '{result}'"""
+            )
+        else:
+            return type(self)(result)
 
     def run_simulation(
         self, initial_state: Union[dict[Node, float], list[float]], n_iters: int = 30
     ) -> StateArray:
-        if len(initial_state) != len(self.G.nodes):
+        if len(initial_state) != len(self._G.nodes):
             raise ValueError(
                 "Incorrect initial states: expected states for "
-                + str(self.G.nodes)
+                + str(self._G.nodes)
                 + ", while got:"
                 + str(initial_state)
             )
@@ -146,7 +168,7 @@ class ResourceNetwork:
             state_arr[i] = self.S(state_arr[i - 1], flow=flow_arr[i])
         total_output_res: NDarrayT[AnyFloat] = np.array(
             [
-                sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
+                sum(map(lambda v: self._G[u][v]["weight"], self._G[u]))
                 for u in self.idx_descriptor
             ]
         )
@@ -165,7 +187,7 @@ class ResourceNetwork:
         scale: float = 1.0,
         max_node_width: float = 1.1,
     ) -> list[SVG]:
-        G: nx.DiGraph = cast(nx.DiGraph, self.G.copy())
+        G: nx.DiGraph = self.G
         res = [None] * len(states)
 
         G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
@@ -208,7 +230,7 @@ class ResourceNetwork:
         G.add_nodes_from(void_node_dict.items())
 
         for u, v in G.edges:
-            weight = self.G.edges[u, v]["weight"]
+            weight = self._G.edges[u, v]["weight"]
             G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
             G.edges[u, v]["penwidth"] = calc_edge_width(weight)
             G.edges[u, v]["arrowsize"] = 0.5
@@ -229,7 +251,7 @@ class ResourceNetwork:
         return cast(list[SVG], np.concatenate(cast(NDarrayT[SVG], answer)))
 
     def plot(self):
-        G = self.G.copy()
+        G = self.G
 
         G.graph["graph"] = {"layout": "neato", "scale": 1.7}  # type: ignore
 
@@ -246,10 +268,10 @@ class ResourceNetworkWithIncome(ResourceNetwork):
         n_iters: int = 30,
         income_seq_func: Optional[Callable[[int], list[float]]] = None,
     ) -> StateArray:
-        if len(initial_state) != len(self.G.nodes):
+        if len(initial_state) != len(self._G.nodes):
             raise ValueError(
                 "Incorrect initial states: expected states for "
-                + str(self.G.nodes)
+                + str(self._G.nodes)
                 + ", while got:"
                 + str(initial_state)
             )
@@ -273,7 +295,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
             NDarrayT[float],
             np.array(
                 [
-                    sum(map(lambda v: self.G[u][v]["weight"], self.G[u]))
+                    sum(map(lambda v: self._G[u][v]["weight"], self._G[u]))
                     for u in self.idx_descriptor
                 ]
             ),
@@ -281,15 +303,15 @@ class ResourceNetworkWithIncome(ResourceNetwork):
 
         for i in range(1, n_iters):
             income_seq = income_seq_func(i - 1)
-            for u in self.G.nodes:
+            for u in self._G.nodes:
                 u_i = self.node_descriptor[u]
-                for v in self.G[u]:
+                for v in self._G[u]:
                     v_i = self.node_descriptor[v]
                     transferred_res = min(
-                        self.G[u][v]["weight"]
+                        self._G[u][v]["weight"]
                         / total_output_res[u_i]
                         * state_arr[i - 1, u_i],
-                        self.G[u][v]["weight"],
+                        self._G[u][v]["weight"],
                     )
                     flow_arr[i, u_i, v_i] = transferred_res
                     state_arr[i, v_i] += transferred_res
