@@ -1,5 +1,5 @@
 import multiprocessing
-from typing import Iterable, cast
+from typing import cast
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
@@ -7,6 +7,7 @@ from ipywidgets import interact, widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
 from .utils.utils import *
 from toolz import identity, valmap
+from IPython.lib import pretty
 
 # from scipy.sparse import sparray
 
@@ -52,6 +53,18 @@ class ResourceNetwork:
         for i in range(len(M)):
             if M_sum[i] == np.inf:
                 self.stochastic_matrix[i, i] = 1
+
+    def _repr_pretty_(self, p: pretty.RepresentationPrinter, cycle: bool) -> None:
+        ctor = pretty.CallExpression.factory(type(self).__name__)
+        p.pretty(
+            ctor(
+                adjacency_matrix=self.adjacency_matrix,
+                idx_descriptor=self.idx_descriptor,
+            )
+        )
+
+    def __repr__(self) -> str:
+        return pretty.pretty(self)
 
     @property
     def G(self) -> nx.DiGraph:
@@ -130,7 +143,6 @@ class ResourceNetwork:
 
         Function `f` should either modify the graph in place and return None
         or return `networkx.DiGraph` which is supposed to be changed
-
         """
 
         G = self.G
