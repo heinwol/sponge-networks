@@ -1,3 +1,4 @@
+from ast import Call
 import multiprocessing
 from typing import cast
 import networkx as nx
@@ -217,21 +218,26 @@ class ResourceNetwork:
         max_weight = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
         min_weight = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
         if np.allclose(max_weight, min_weight):
-            calc_edge_width = lambda x: 2.5
+            calc_edge_width: Callable[[float], float] = lambda x: 2.5
         else:
             calc_edge_width = linear_func_from_2_points(
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
-        layout = nx.nx_pydot.pydot_layout(G, prog="neato")
-        layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
+        if not all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
+            layout = nx.nx_pydot.pydot_layout(G, prog="neato")
+            layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
+            for v in G.nodes:
+                pos = str(layout_new[v][0]) + "," + str(layout_new[v][1]) + "!"
+                G.nodes[v]["pos"] = pos
+
+        # adding big "void" transparent nodes to preserve layout when
+        # width of a node is changed dynamically
         void_node_dict = {}
         for v in G.nodes:
             G.nodes[v]["tooltip"] = str(v)
-            pos = str(layout_new[v][0]) + "," + str(layout_new[v][1]) + "!"
-            G.nodes[v]["pos"] = pos
             void_node_dict[("void", v)] = {
-                "pos": pos,
+                "pos": G.nodes[v]["pos"],
                 "style": "invis",
                 "label": "",
                 "color": "transparent",

@@ -29,7 +29,7 @@ from IPython.core.display import SVG
 from toolz import curry, partition_all
 
 AnyFloat: TypeAlias = np.floating
-Node: TypeAlias = Hashable
+Node = TypeVar("Node", bound=Hashable, covariant=True)
 FlowMatrix: TypeAlias = Sequence[Sequence[Sequence[float]]]
 T = TypeVar("T", bound=Any)
 T1 = TypeVar("T1", bound=Any)
@@ -54,6 +54,9 @@ class TypedMapping(Protocol[K, V]):
         ...
 
     def __len__(self) -> int:
+        ...
+
+    def __contains__(self, key: K, /) -> bool:
         ...
 
 
@@ -107,10 +110,24 @@ DescriptorPair = TypedDict(
 )
 
 
-class SimpleNodeArrayDescriptor(Generic[ValT]):
+class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
+    """
+    This class provides a way to support array operations on graphs which
+    set nodes is not `set(range(n))` for some n. E.g. Nodes can be enumerated
+    in an unconstrained way or even be of any arbitrary (though `Hashable`) class
+    (marked as TypeVar `K`)
+
+    The `val_descriptor` field is what's used to map arbitrary data to indices
+    in a (multidinensional) array `arr`. *Warning* The main constraint is that
+    `val_descriptor` is the same for each (affected; see below) axis of `arr`.
+
+    One can specify the `dims_affected` parameter to mark the axes where
+    the index mapping should occur. The other axes will be accessed as-is.
+    """
+
     def __init__(
         self,
-        val_descriptor: TypedMapping[Hashable, int],
+        val_descriptor: dict[Node, int],
         arr: NDarrayT[ValT],
         dims_affected: Optional[tuple[int, ...]] = None,
     ):
@@ -119,35 +136,53 @@ class SimpleNodeArrayDescriptor(Generic[ValT]):
         self.dims_affected = set(
             dims_affected if dims_affected is not None else range(len(arr.shape))
         )
+        self._tuple_is_used = any(isinstance(x, tuple) for x in val_descriptor.keys())
 
     def __len__(self) -> int:
         return len(self.arr)
 
-    def __getitem__(
-        self, key: Union[int, tuple[int, ...]]
-    ) -> Union[NDarrayT[ValT], ValT]:
+    def __getitem__(self, key: Node | Sequence[Node]) -> Union[NDarrayT[ValT], ValT]:
         # [0, 2] => (arr['lala', 5, 1] => arr[desc['lala'], 5, desc[12]])
-        key_ = (key,) if not isinstance(key, tuple) else key
-        new_key = list(key_)
+        #
+        if self._tuple_is_used and type(key) == tuple:
+            raise ValueError(
+                f"""
+                It seems like a tuple is used as one of value descriptor keys.
+                At the same time, a tuple ('{key}') is passed to __getitem__.
+                To avoid ambiguity, such behavior is prohibited. Please use
+                list ({list(key)}) instead.
+                """
+            )
+
+        key_ = (key,) if not isinstance(key, (tuple, Sequence)) else tuple(key)
+        new_key: list[int] = list(key_)  # type: ignore
         for i in range(len(key_)):
             if i in self.dims_affected:
-                new_key[i] = self.val_descriptor[key_[i]]
-        new_key = tuple(new_key)
-        return self.arr[new_key if len(new_key) != 1 else new_key[0]]
+                print(f"{self.val_descriptor=},\n{key_=},\nkey_type={type(key_)}\n\n")
+                new_key[i] = (
+                    self.val_descriptor[key_[i]]
+                    if key_[i] in self.val_descriptor
+                    else key_[i]
+                )
+        new_key_t = tuple(new_key)
+        return self.arr[new_key_t if len(new_key_t) != 1 else new_key_t[0]]
 
+
+# it = SimpleNodeArrayDescriptor({"lala": 1}, np.arange(12))
+# it["lala"]
 
 StateArraySlice = TypedDict(
     "StateArraySlice",
     {
-        "states": SimpleNodeArrayDescriptor[AnyFloat],
-        "flow": SimpleNodeArrayDescriptor[AnyFloat],
-        "total_output_res": SimpleNodeArrayDescriptor[AnyFloat],
+        "states": SimpleNodeArrayDescriptor[Node, AnyFloat],
+        "flow": SimpleNodeArrayDescriptor[Node, AnyFloat],
+        "total_output_res": SimpleNodeArrayDescriptor[Node, AnyFloat],
     },
 )
 
 
 @dataclass
-class StateArray:
+class StateArray(Generic[Node]):
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
     states_arr: NDarrayT[AnyFloat]  # N x M
@@ -176,7 +211,8 @@ class StateArray:
         cols = ["t"] + vertices
         data: list[Any] = [None] * n_iters
         for i in range(n_iters):
-            data[i] = [i] + lmap(get(self[i]["states"]), vertices)
+            data[i] = [i] + [self[i]["states"][[v]] for v in vertices]
+            # lmap(get(self[i]["states"]), vertices)  # type: ignore
         df = pd.DataFrame(columns=cols, data=data)
         return df.set_index("t")
 
@@ -197,8 +233,8 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list
     total_sum = states.states_arr[-1].sum()
     calc_node_width = linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
     res: list[Optional[SVG]] = [None] * len(rng)
-    n_it = 0
-    for idx in rng:
+    # n_it = 0
+    for n_it, idx in enumerate(rng):
         state = states[idx]
         for v in G.nodes:
             if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
@@ -214,5 +250,5 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list
         for u, v, d in G.edges(data=True):
             d["label"] = d["weight"]
         res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
-        n_it += 1
+        # n_it += 1
     return cast(list[SVG], res)
