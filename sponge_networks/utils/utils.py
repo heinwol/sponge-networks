@@ -29,7 +29,7 @@ from IPython.core.display import SVG
 from toolz import curry, partition_all
 
 AnyFloat: TypeAlias = np.floating
-Node = TypeVar("Node", bound=Hashable, covariant=True)
+Node = TypeVar("Node", bound=Hashable)
 FlowMatrix: TypeAlias = Sequence[Sequence[Sequence[float]]]
 T = TypeVar("T", bound=Any)
 T1 = TypeVar("T1", bound=Any)
@@ -141,7 +141,7 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
     def __len__(self) -> int:
         return len(self.arr)
 
-    def __getitem__(self, key: Node | Sequence[Node]) -> Union[NDarrayT[ValT], ValT]:
+    def __getitem__(self, key: Node | list[Node]) -> NDarrayT[ValT] | ValT:
         # [0, 2] => (arr['lala', 5, 1] => arr[desc['lala'], 5, desc[12]])
         #
         if self._tuple_is_used and type(key) == tuple:
@@ -150,16 +150,16 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
                 It seems like a tuple is used as one of value descriptor keys.
                 At the same time, a tuple ('{key}') is passed to __getitem__.
                 To avoid ambiguity, such behavior is prohibited. Please use
-                list ({list(key)}) instead.
+                list ('{list(key)}') instead.
                 """
             )
 
-        key_ = (key,) if not isinstance(key, (tuple, Sequence)) else tuple(key)
-        new_key: list[int] = list(key_)  # type: ignore
+        key_: list[Node] = [key] if type(key) not in (list, tuple) else list(key)  # type: ignore
+        new_key: list[int] = [0] * len(key_)
         for i in range(len(key_)):
             if i in self.dims_affected:
-                print(f"{self.val_descriptor=},\n{key_=},\nkey_type={type(key_)}\n\n")
-                new_key[i] = (
+                # print(f"{self.val_descriptor=},\n{key_=},\nkey_type={type(key_)}\n\n")
+                new_key[i] = (  # type: ignore
                     self.val_descriptor[key_[i]]
                     if key_[i] in self.val_descriptor
                     else key_[i]
@@ -168,17 +168,10 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
         return self.arr[new_key_t if len(new_key_t) != 1 else new_key_t[0]]
 
 
-# it = SimpleNodeArrayDescriptor({"lala": 1}, np.arange(12))
-# it["lala"]
-
-StateArraySlice = TypedDict(
-    "StateArraySlice",
-    {
-        "states": SimpleNodeArrayDescriptor[Node, AnyFloat],
-        "flow": SimpleNodeArrayDescriptor[Node, AnyFloat],
-        "total_output_res": SimpleNodeArrayDescriptor[Node, AnyFloat],
-    },
-)
+class StateArraySlice(TypedDict, Generic[Node]):
+    states: SimpleNodeArrayDescriptor[Node, AnyFloat]
+    flow: SimpleNodeArrayDescriptor[Node, AnyFloat]
+    total_output_res: SimpleNodeArrayDescriptor[Node, AnyFloat]
 
 
 @dataclass
@@ -195,13 +188,19 @@ class StateArray(Generic[Node]):
     def __getitem__(self, time: int) -> StateArraySlice:
         return {
             "states": SimpleNodeArrayDescriptor(
-                self.node_descriptor, self.states_arr[time], (0,)
+                self.node_descriptor,
+                self.states_arr[time],
+                (0,),
             ),
             "flow": SimpleNodeArrayDescriptor(
-                self.node_descriptor, self.flow_arr[time], (0, 1)
+                self.node_descriptor,
+                self.flow_arr[time],
+                (0, 1),
             ),
             "total_output_res": SimpleNodeArrayDescriptor(
-                self.node_descriptor, self.total_output_res, (0,)
+                self.node_descriptor,
+                self.total_output_res,
+                (0,),
             ),
         }
 
@@ -238,12 +237,12 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list
         state = states[idx]
         for v in G.nodes:
             if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
-                G.nodes[v]["label"] = my_fmt(cast(AnyFloat, state["states"][v]))
-                G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][v]))
+                G.nodes[v]["label"] = my_fmt(cast(AnyFloat, state["states"][[v]]))
+                G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))
 
                 G.nodes[v]["fillcolor"] = (
                     "#f0fff4"
-                    if state["states"][v] < state["total_output_res"][v]
+                    if state["states"][[v]] < state["total_output_res"][[v]]
                     else "#b48ead"
                 )
 

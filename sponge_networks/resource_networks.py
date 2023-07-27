@@ -224,7 +224,20 @@ class ResourceNetwork:
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
-        if not all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
+        if all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
+            for node in G.nodes:
+                node_d: dict = G.nodes[node]
+                if isinstance(node_d["pos"], Sequence):
+                    node_d["pos"] = f"{node_d['pos'][0]},{node_d['pos'][1]}!"
+                elif not isinstance(node_d["pos"], str):
+                    raise ValueError(
+                        f"""
+                        Attribute "pos" of every node should be either Sequence or str,
+                        however on node '{node}' attribute "pos" is of type '{type(node_d["pos"])}'
+                        with value '{node_d["pos"]}'
+                        """
+                    )
+        else:
             layout = nx.nx_pydot.pydot_layout(G, prog="neato")
             layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
             for v in G.nodes:
