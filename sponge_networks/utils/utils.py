@@ -101,13 +101,9 @@ def const_iter(x: T) -> Iterator[T]:
         yield x
 
 
-DescriptorPair = TypedDict(
-    "DescriptorPair",
-    {
-        "node_descriptor": dict[Node, int],
-        "idx_descriptor": TypedMapping[int, Node],
-    },
-)
+class DescriptorPair(TypedDict, Generic[Node]):
+    node_descriptor: dict[Node, int]
+    idx_descriptor: TypedMapping[int, Node]
 
 
 class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
@@ -158,7 +154,6 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
         new_key: list[int] = [0] * len(key_)
         for i in range(len(key_)):
             if i in self.dims_affected:
-                # print(f"{self.val_descriptor=},\n{key_=},\nkey_type={type(key_)}\n\n")
                 new_key[i] = (  # type: ignore
                     self.val_descriptor[key_[i]]
                     if key_[i] in self.val_descriptor

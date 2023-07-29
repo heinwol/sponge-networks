@@ -6,13 +6,10 @@ from sponge_networks.resource_networks import *
 from sponge_networks.network_manipulation import *
 from sponge_networks.utils.utils import *
 
-ProtocolPair = TypedDict(
-    "ProtocolPair",
-    {
-        "result_protocol": pd.DataFrame,
-        "standard_protocol": pd.DataFrame,
-    },
-)
+
+class ProtocolPair(TypedDict):
+    result_protocol: pd.DataFrame
+    standard_protocol: pd.DataFrame
 
 
 def resourceDiGraph_from_array(arr: npt.ArrayLike) -> ResourceNetwork:
