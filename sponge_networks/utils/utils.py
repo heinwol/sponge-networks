@@ -180,7 +180,7 @@ class StateArray(Generic[Node]):
     def __len__(self) -> int:
         return len(self.states_arr)
 
-    def __getitem__(self, time: int) -> StateArraySlice:
+    def __getitem__(self, time: int) -> StateArraySlice[Node]:
         return {
             "states": SimpleNodeArrayDescriptor(
                 self.node_descriptor,
@@ -211,7 +211,9 @@ class StateArray(Generic[Node]):
         return df.set_index("t")
 
 
-def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list[SVG]:
+def parallel_plot(
+    G: nx.DiGraph, states: StateArray[Node], rng: Sequence[int]
+) -> list[SVG]:
     def my_fmt(x: Union[AnyFloat, int]) -> str:
         if isinstance(x, int):
             return str(x)
@@ -227,10 +229,10 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list
     total_sum = states.states_arr[-1].sum()
     calc_node_width = linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
     res: list[Optional[SVG]] = [None] * len(rng)
-    # n_it = 0
     for n_it, idx in enumerate(rng):
         state = states[idx]
         for v in G.nodes:
+            v = cast(Node, v)
             if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
                 G.nodes[v]["label"] = my_fmt(cast(AnyFloat, state["states"][[v]]))
                 G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))
@@ -244,5 +246,4 @@ def parallel_plot(G: nx.DiGraph, states: StateArray, rng: Sequence[int]) -> list
         for u, v, d in G.edges(data=True):
             d["label"] = d["weight"]
         res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
-        # n_it += 1
     return cast(list[SVG], res)

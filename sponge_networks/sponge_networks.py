@@ -10,7 +10,6 @@ class ResourceNetworkGreedy(ResourceNetwork):
         adj_diag: NDarrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
         q_contained: NDarrayT[AnyFloat] = np.minimum(q, adj_diag)
         q_rest: NDarrayT[AnyFloat] = q - q_contained  # type: ignore
-        # print(q_contained[:, 0])
         return np.minimum(  # type: ignore
             q_rest * self.stochastic_matrix, self.adjacency_matrix
         ) + np.diag(q_contained)

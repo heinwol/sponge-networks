@@ -15,7 +15,7 @@ from IPython.lib import pretty
 ResourceNetworkType = TypeVar("ResourceNetworkType", bound=type["ResourceNetwork"])
 
 
-class ResourceNetwork:
+class ResourceNetwork(Generic[Node]):
     def __init__(self, G: Optional[nx.DiGraph] = None):
         if G is None:
             G = nx.DiGraph()
@@ -161,7 +161,7 @@ class ResourceNetwork:
 
     def run_simulation(
         self, initial_state: Union[dict[Node, float], list[float]], n_iters: int = 30
-    ) -> StateArray:
+    ) -> StateArray[Node]:
         if len(initial_state) != len(self._G.nodes):
             raise ValueError(
                 "Incorrect initial states: expected states for "
@@ -185,7 +185,7 @@ class ResourceNetwork:
                 for u in self.idx_descriptor
             ]
         )
-        return StateArray(
+        return StateArray[Node](
             self.node_descriptor,
             self.idx_descriptor,
             state_arr,
@@ -195,7 +195,7 @@ class ResourceNetwork:
 
     def plot_with_states(
         self,
-        states: StateArray,
+        states: StateArray[Node],
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
         scale: float = 1.0,
         max_node_width: float = 1.1,
@@ -298,7 +298,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
         initial_state: Union[dict[Node, float], list[float]],
         n_iters: int = 30,
         income_seq_func: Optional[Callable[[int], list[float]]] = None,
-    ) -> StateArray:
+    ) -> StateArray[Node]:
         if len(initial_state) != len(self._G.nodes):
             raise ValueError(
                 "Incorrect initial states: expected states for "
@@ -351,7 +351,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
                     + income_seq[u_i]
                 )
 
-        return StateArray(
+        return StateArray[Node](
             self.node_descriptor,
             self.idx_descriptor,
             state_arr,
@@ -360,7 +360,9 @@ class ResourceNetworkWithIncome(ResourceNetwork):
         )
 
 
-def plot_simulation(G: ResourceNetwork, simulation: StateArray, scale: float = 1.0):
+def plot_simulation(
+    G: ResourceNetwork[Node], simulation: StateArray[Node], scale: float = 1.0
+):
     pl = G.plot_with_states(simulation, scale=scale)
     f = lambda i: pl[i]
     interact(
