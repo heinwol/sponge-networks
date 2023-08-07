@@ -1,4 +1,6 @@
 from typing import Literal
+
+from networkx import Graph
 from .utils.utils import *
 from .resource_networks import *
 
@@ -17,6 +19,40 @@ class ResourceNetworkGreedy(ResourceNetwork):
 
 
 GridType: TypeAlias = Literal["triangular", "hexagonal", "grid_2d"]
+
+
+def _grid_2d_assign_positions(G: nx.Graph, n_cols: int, n_rows: int) -> nx.Graph:
+    G = G.copy()
+    for node in G.nodes:
+        x, y = node
+        G.nodes[node]["pos"] = (x, y)
+    return G
+
+
+def grid_with_positions(n_cols: int, n_rows: int, grid_type: GridType) -> nx.DiGraph:
+    match grid_type:
+        case "grid_2d":
+            grid_no_positions = nx.grid_2d_graph(
+                n_cols + 1, n_rows + 1, create_using=nx.Graph
+            )
+            grid_undirected = _grid_2d_assign_positions(
+                grid_no_positions, n_cols, n_rows
+            )
+        case "hexagonal":
+            grid_undirected = nx.hexagonal_lattice_graph(
+                n_rows, n_cols, create_using=nx.Graph
+            )
+
+        case "triangular":
+            grid_undirected = nx.triangular_lattice_graph(
+                n_rows, n_cols, create_using=nx.Graph
+            )
+
+        case _:
+            raise ValueError(f'unknown grid type: "{grid_type}"')
+    grid_directed = cast(nx.DiGraph, grid_undirected.to_directed())
+    return grid_directed
+
 
 # grid types are as follows:
 # =========================
