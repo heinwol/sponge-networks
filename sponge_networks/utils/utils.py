@@ -15,7 +15,6 @@ from typing import (
     TypeAlias,
     TypeVar,
     TypedDict,
-    Union,
     cast,
     overload,
     Self,
@@ -206,7 +205,6 @@ class StateArray(Generic[Node]):
         data: list[Any] = [None] * n_iters
         for i in range(n_iters):
             data[i] = [i] + [self[i]["states"][[v]] for v in vertices]
-            # lmap(get(self[i]["states"]), vertices)  # type: ignore
         df = pd.DataFrame(columns=cols, data=data)
         return df.set_index("t")
 
@@ -214,7 +212,7 @@ class StateArray(Generic[Node]):
 def parallel_plot(
     G: nx.DiGraph, states: StateArray[Node], rng: Sequence[int]
 ) -> list[SVG]:
-    def my_fmt(x: Union[AnyFloat, int]) -> str:
+    def my_fmt(x: AnyFloat | int) -> str:
         if isinstance(x, int):
             return str(x)
         x_int, x_frac = int(x), x % 1

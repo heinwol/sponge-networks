@@ -114,7 +114,7 @@ class ResourceNetwork(Generic[Node]):
         return min_
 
     def _state_to_normal_form(
-        self, q: Union[dict[Node, float], list[float]]
+        self, q: dict[Node, float] | list[float]
     ) -> dict[Node, float]:
         if isinstance(q, dict):
             return q
@@ -160,7 +160,7 @@ class ResourceNetwork(Generic[Node]):
             return type(self)(result)
 
     def run_simulation(
-        self, initial_state: Union[dict[Node, float], list[float]], n_iters: int = 30
+        self, initial_state: dict[Node, float] | list[float], n_iters: int = 30
     ) -> StateArray[Node]:
         if len(initial_state) != len(self._G.nodes):
             raise ValueError(
@@ -295,7 +295,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
     @override
     def run_simulation(
         self,
-        initial_state: Union[dict[Node, float], list[float]],
+        initial_state: dict[Node, float] | list[float],
         n_iters: int = 30,
         income_seq_func: Optional[Callable[[int], list[float]]] = None,
     ) -> StateArray[Node]:
