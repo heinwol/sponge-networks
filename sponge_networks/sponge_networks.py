@@ -1,6 +1,12 @@
-from typing import Literal
+from typing import Literal, final
+from abc import ABC, abstractmethod
+import abc
 
 from networkx import Graph
+import sponge_networks
+
+from sponge_networks.resource_networks import nx
+from sponge_networks.utils.utils import nx
 from .utils.utils import *
 from .resource_networks import *
 
@@ -57,6 +63,10 @@ GridType: TypeAlias = Literal["triangular", "hexagonal", "grid_2d"]
 # └────────┘     └────────┘
 
 
+SpongeNode: TypeAlias = tuple[int, int]
+SpongeSinkNode: TypeAlias = tuple[int, Literal[-1]]
+
+
 def _grid_2d_assign_positions(G: nx.Graph, n_cols: int, n_rows: int) -> nx.Graph:
     G = G.copy()
     for node in G.nodes:
@@ -88,3 +98,59 @@ def grid_with_positions(n_cols: int, n_rows: int, grid_type: GridType) -> nx.DiG
             raise ValueError(f'unknown grid type: "{grid_type}"')
     grid_directed = cast(nx.DiGraph, grid_undirected.to_directed())
     return grid_directed
+
+
+class AbstractSpongeNetworkProvider(ABC):
+    @property
+    @abstractmethod
+    def grid(self) -> nx.DiGraph:
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def _generate_sinks(grid: nx.DiGraph) -> nx.DiGraph:
+        """
+        ## Warning
+        all sink nodes should be of type `SpongeSinkNode`
+        """
+        ...
+
+
+class AbstractSpongeNetwork(ABC):
+    def __init__(self, provider: AbstractSpongeNetworkProvider) -> None:
+        grid = cast(nx.DiGraph, provider.grid.copy())
+        grid = provider._generate_sinks(grid)
+
+        self.resource_network = ResourceNetworkGreedy(grid)
+        # self.grid = provider.grid
+
+    @abstractmethod
+    def run_sponge_simulation(
+        self, initial_state: dict[SpongeNode, float] | list[float], n_iters: int = 30
+    ) -> StateArray[SpongeNode]:
+        """
+        ## Warning
+        `initial_state` applies only to the upper nodes. In case of list,
+        the order of nodes shold be from left to right
+        """
+        ...
+
+    def plot_simulation(self, sim: StateArray[SpongeNode], scale: float = 1.0) -> None:
+        plot_simulation(self.resource_network, sim, scale)
+
+
+@final
+class SpongeNetwork2dProvider(AbstractSpongeNetworkProvider):
+    def __init__(self, n_cols: int, n_rows: int) -> None:
+        self.n_cols = n_cols
+        self.n_rows = n_rows
+        self._grid = grid_with_positions(n_cols, n_rows, grid_type="grid_2d")
+
+    @property
+    def grid(self) -> nx.DiGraph:
+        return self._grid
+
+    # @staticmethod
+    # def _generate_sinks(grid: nx.DiGraph) -> nx.DiGraph:
+
+    # return
