@@ -215,8 +215,8 @@ class ResourceNetwork(Generic[Node]):
 
         (prop_setter if prop_setter is not None else identity)(G)
 
-        max_weight = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        min_weight = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
+        max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
+        min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
         if np.allclose(max_weight, min_weight):
             calc_edge_width: Callable[[float], float] = lambda x: 2.5
         else:
@@ -362,7 +362,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
 
 def plot_simulation(
     G: ResourceNetwork[Node], simulation: StateArray[Node], scale: float = 1.0
-):
+) -> None:
     pl = G.plot_with_states(simulation, scale=scale)
     f = lambda i: pl[i]
     interact(
