@@ -1,12 +1,7 @@
 from typing import Literal, final
 from abc import ABC, abstractmethod
-import abc
-
-from networkx import Graph
 import sponge_networks
 
-from sponge_networks.resource_networks import nx
-from sponge_networks.utils.utils import nx
 from .utils.utils import *
 from .resource_networks import *
 
