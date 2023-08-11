@@ -100,6 +100,13 @@ def const_iter(x: T) -> Iterator[T]:
         yield x
 
 
+def const(x: T) -> Callable[..., T]:
+    def inner(*args, **kwargs):
+        return x
+
+    return inner
+
+
 class DescriptorPair(TypedDict, Generic[Node]):
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
@@ -225,7 +232,11 @@ def parallel_plot(
         return str(x_int) + "." + rem
 
     total_sum = states.states_arr[-1].sum()
-    calc_node_width = linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
+    calc_node_width = (
+        linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
+        if total_sum > 0
+        else const(0.35)
+    )
     res: list[Optional[SVG]] = [None] * len(rng)
     for n_it, idx in enumerate(rng):
         state = states[idx]
