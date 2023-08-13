@@ -99,15 +99,46 @@ def grid_with_positions(n_cols: int, n_rows: int, grid_type: GridType) -> nx.DiG
     return grid_directed
 
 
-class AbstractSpongeNetworkBuilderProtocol(Protocol):
+# class AbstractSpongeNetworkBuilderProtocol(Protocol):
+#     n_cols: int
+#     n_rows: int
+#     sink_edge_weights: float
+#     grid: nx.DiGraph
+
+#     def upper_nodes(self) -> list[SpongeNode]:
+#         ...
+
+#     def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
+#         """
+#         ## Warning
+#         all sink nodes should be of type `SpongeSinkNode`
+#         """
+#         ...
+
+#     def generate_reflective_edges(self, grid: nx.DiGraph) -> nx.DiGraph:
+#         ...
+
+
+@dataclass
+class AbstractSpongeNetworkBuilder(ABC):
     n_cols: int
     n_rows: int
-    sink_edge_weights: float
-    grid: nx.DiGraph
+    sink_edge_weights: float = 1.0
+    grid: nx.DiGraph = field(init=False)
 
+    @abstractmethod
     def upper_nodes(self) -> list[SpongeNode]:
         ...
 
+    @abstractmethod
+    def bottom_nodes(self) -> list[SpongeNode]:
+        """
+        ## Warning
+        these nodes does not include sink nodes
+        """
+        ...
+
+    @abstractmethod
     def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
         """
         ## Warning
@@ -115,24 +146,7 @@ class AbstractSpongeNetworkBuilderProtocol(Protocol):
         """
         ...
 
-    def generate_reflective_edges(self, grid: nx.DiGraph) -> nx.DiGraph:
-        ...
-
-
-@dataclass
-class AbstractSpongeNetworkBuilder(ABC, AbstractSpongeNetworkBuilderProtocol):
-    n_cols: int
-    n_rows: int
-    sink_edge_weights: float = 1.0
-    grid: nx.DiGraph = field(init=False)
-
     @abstractmethod
-    # @override
-    def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
-        ...
-
-    @abstractmethod
-    # @override
     def generate_reflective_edges(self, grid: nx.DiGraph) -> nx.DiGraph:
         ...
 
@@ -168,14 +182,14 @@ class SpongeNetwork2dBuilder(AbstractSpongeNetworkBuilder):
         self.grid = grid_with_positions(self.n_cols, self.n_rows, "grid_2d")
 
     @override
-    def generate_sinks(self, grid: nx.DiGraph) -> int:
+    def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
         grid = cast(nx.DiGraph, grid.copy())
         grid.add_edges_from(
             ((i, 0), (i, -1), {"weight": self.sink_edge_weights})
             for i in range(self.n_cols + 1)
         )
-        return 3
+        return grid
 
     @override
-    def generate_reflective_edges(self, grid: nx.DiGraph) -> int:
-        return 3
+    def generate_reflective_edges(self, grid: nx.DiGraph) -> nx.DiGraph:
+        return grid
