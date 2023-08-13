@@ -8,7 +8,7 @@ from .resource_networks import (
 from .sponge_networks import (
     AbstractSpongeNetwork,
     AbstractSpongeNetworkBuilder,
-    AbstractSpongeNetworkBuilderProtocol,
+    SpongeNetworkLayout,
     ResourceNetworkGreedy,
     SpongeNetwork2dBuilder,
     grid_with_positions,
