@@ -1,9 +1,13 @@
+from dataclasses import field
 from typing import Literal, final
 from abc import ABC, abstractmethod
 import sponge_networks
+from sponge_networks.resource_networks import nx
+from sponge_networks.utils.utils import nx
 
 from .utils.utils import *
 from .resource_networks import *
+import abc
 
 
 class ResourceNetworkGreedy(ResourceNetwork):
@@ -95,29 +99,52 @@ def grid_with_positions(n_cols: int, n_rows: int, grid_type: GridType) -> nx.DiG
     return grid_directed
 
 
-class AbstractSpongeNetworkProvider(ABC):
-    @property
-    @abstractmethod
-    def grid(self) -> nx.DiGraph:
+class AbstractSpongeNetworkBuilderProtocol(Protocol):
+    n_cols: int
+    n_rows: int
+    sink_edge_weights: float
+    grid: nx.DiGraph
+
+    def upper_nodes(self) -> list[SpongeNode]:
         ...
 
-    @staticmethod
-    @abstractmethod
-    def _generate_sinks(grid: nx.DiGraph) -> nx.DiGraph:
+    def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
         """
         ## Warning
         all sink nodes should be of type `SpongeSinkNode`
         """
         ...
 
+    def generate_reflective_edges(self, grid: nx.DiGraph) -> nx.DiGraph:
+        ...
+
+
+@dataclass
+class AbstractSpongeNetworkBuilder(ABC, AbstractSpongeNetworkBuilderProtocol):
+    n_cols: int
+    n_rows: int
+    sink_edge_weights: float = 1.0
+    grid: nx.DiGraph = field(init=False)
+
+    @abstractmethod
+    # @override
+    def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
+        ...
+
+    @abstractmethod
+    # @override
+    def generate_reflective_edges(self, grid: nx.DiGraph) -> nx.DiGraph:
+        ...
+
 
 class AbstractSpongeNetwork(ABC):
-    def __init__(self, provider: AbstractSpongeNetworkProvider) -> None:
-        grid = cast(nx.DiGraph, provider.grid.copy())
-        grid = provider._generate_sinks(grid)
+    def __init__(self, builder: AbstractSpongeNetworkBuilder) -> None:
+        grid = cast(nx.DiGraph, builder.grid.copy())
+        grid = builder.generate_sinks(grid)
+        grid = builder.generate_reflective_edges(grid)
 
         self.resource_network = ResourceNetworkGreedy(grid)
-        # self.grid = provider.grid
+        # self.grid = builder.grid
 
     @abstractmethod
     def run_sponge_simulation(
@@ -126,7 +153,7 @@ class AbstractSpongeNetwork(ABC):
         """
         ## Warning
         `initial_state` applies only to the upper nodes. In case of list,
-        the order of nodes shold be from left to right
+        the order of nodes shold go from left to right
         """
         ...
 
@@ -135,17 +162,20 @@ class AbstractSpongeNetwork(ABC):
 
 
 @final
-class SpongeNetwork2dProvider(AbstractSpongeNetworkProvider):
-    def __init__(self, n_cols: int, n_rows: int) -> None:
-        self.n_cols = n_cols
-        self.n_rows = n_rows
-        self._grid = grid_with_positions(n_cols, n_rows, grid_type="grid_2d")
+@dataclass
+class SpongeNetwork2dBuilder(AbstractSpongeNetworkBuilder):
+    def __post_init__(self):
+        self.grid = grid_with_positions(self.n_cols, self.n_rows, "grid_2d")
 
-    @property
-    def grid(self) -> nx.DiGraph:
-        return self._grid
+    @override
+    def generate_sinks(self, grid: nx.DiGraph) -> int:
+        grid = cast(nx.DiGraph, grid.copy())
+        grid.add_edges_from(
+            ((i, 0), (i, -1), {"weight": self.sink_edge_weights})
+            for i in range(self.n_cols + 1)
+        )
+        return 3
 
-    # @staticmethod
-    # def _generate_sinks(grid: nx.DiGraph) -> nx.DiGraph:
-
-    # return
+    @override
+    def generate_reflective_edges(self, grid: nx.DiGraph) -> int:
+        return 3
