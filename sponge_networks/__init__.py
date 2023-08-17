@@ -6,8 +6,10 @@ from .resource_networks import (
     plot_simulation,
 )
 from .sponge_networks import (
-    AbstractSpongeNetwork,
+    SpongeNetwork,
     AbstractSpongeNetworkBuilder,
+    Layout2d,
+    LayoutT,
     SpongeNetworkLayout,
     ResourceNetworkGreedy,
     SpongeNetwork2dBuilder,

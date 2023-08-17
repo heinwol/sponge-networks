@@ -137,9 +137,23 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
 
     def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
         grid = cast(nx.DiGraph, grid.copy())
+
+        def gen_pos(node: SpongeNode) -> tuple[float, float]:
+            node_d = grid.nodes[node]
+            if "pos" in node_d:
+                x, y = node_d["pos"]
+            else:
+                x, y = node
+            return (x, y - 1)
+
+        bottom_nodes = self.bottom_nodes()
+        grid.add_nodes_from(
+            ((i, -1), {"pos": gen_pos(bottom_node)})
+            for i, bottom_node in enumerate(bottom_nodes)
+        )
         grid.add_edges_from(
             (bottom_node, (i, -1), {"weight": self.layout.weights_sink_edge})
-            for i, bottom_node in enumerate(self.bottom_nodes())
+            for i, bottom_node in enumerate(bottom_nodes)
         )
         return grid
 
@@ -150,21 +164,42 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
         )
         return grid
 
+    def initial_state_processor_provider(
+        self,
+    ) -> Callable[[list[float] | dict[SpongeNode, float]], dict[SpongeNode, float]]:
+        upper_nodes = self.upper_nodes()
+
+        def initial_state_processor(
+            initial_state_short: list[float] | dict[SpongeNode, float],
+        ) -> dict[SpongeNode, float]:
+            if isinstance(initial_state_short, dict):
+                return initial_state_short
+            elif len(upper_nodes) == len(initial_state_short):
+                return dict(zip(upper_nodes, initial_state_short))
+            else:
+                raise ValueError(
+                    f"length of upper nodes ({len(upper_nodes)}) and initial state ({len(initial_state_short)}) should be equal"
+                )
+
+        return initial_state_processor
+
     def final_grid_hook(self, grid: nx.DiGraph) -> nx.DiGraph:
         return grid
 
 
-class AbstractSpongeNetwork(ABC):
+class SpongeNetwork:
     def __init__(self, builder: AbstractSpongeNetworkBuilder) -> None:
         grid = builder.generate_initial_grid()
-        grid = builder.generate_loops(grid)
         grid = builder.generate_weights_from_layout(grid)
+        grid = builder.generate_loops(grid)
         grid = builder.generate_sinks(grid)
         grid = builder.final_grid_hook(grid)
 
         self.resource_network = ResourceNetworkGreedy(grid)
 
-    @abstractmethod
+        self.upper_nodes = builder.upper_nodes()
+        self.initial_state_processor = builder.initial_state_processor_provider()
+
     def run_sponge_simulation(
         self, initial_state: dict[SpongeNode, float] | list[float], n_iters: int = 30
     ) -> StateArray[SpongeNode]:
@@ -173,7 +208,9 @@ class AbstractSpongeNetwork(ABC):
         `initial_state` applies only to the upper nodes. In case of list,
         the order of nodes shold go from left to right
         """
-        ...
+        return self.resource_network.run_simulation(
+            self.initial_state_processor(initial_state), n_iters=n_iters
+        )
 
     def plot_simulation(self, sim: StateArray[SpongeNode], scale: float = 1.0) -> None:
         plot_simulation(self.resource_network, sim, scale)
@@ -182,6 +219,8 @@ class AbstractSpongeNetwork(ABC):
 @dataclass
 class Layout2d(SpongeNetworkLayout):
     horizontal_weight: float
+    up_down_weight: float
+    down_up_weight: float
 
 
 @final
@@ -193,19 +232,28 @@ class SpongeNetwork2dBuilder(AbstractSpongeNetworkBuilder[Layout2d]):
 
     @override
     def upper_nodes(self) -> list[SpongeNode]:
-        return [(i, 0) for i in range(self.n_cols + 1)]
+        return [(i, self.n_rows) for i in range(self.n_cols + 1)]
 
     @override
     def bottom_nodes(self) -> list[SpongeNode]:
-        return [(i, self.n_rows) for i in range(self.n_cols + 1)]
+        return [(i, 0) for i in range(self.n_cols + 1)]
 
     @override
     def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph:
         grid = cast(nx.DiGraph, grid.copy())
-
-        # grid.add_edges_from(
-        #     (bottom_node, (i, -1), {"weight": self.layout.sink_edge_weights})
-        #     for i, bottom_node in enumerate(self.bottom_nodes())
-        # )
-
+        u: tuple[int, int]
+        v: tuple[int, int]
+        d: dict
+        for u, v, d in grid.edges(data=True):
+            (i1, j1), (i2, j2) = (u, v)
+            if j1 == j2:
+                d["weight"] = self.layout.horizontal_weight
+            elif i1 == i2 and j1 > j2:
+                d["weight"] = self.layout.up_down_weight
+            elif i1 == i2 and j1 < j2:
+                d["weight"] = self.layout.down_up_weight
+            else:
+                raise ValueError(
+                    f"some strange edge encountered while building sponge network: {u} -> {v}"
+                )
         return grid
