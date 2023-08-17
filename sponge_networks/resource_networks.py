@@ -113,13 +113,17 @@ class ResourceNetwork(Generic[Node]):
         min_ = T_i.min()
         return min_
 
-    def _state_to_normal_form(
+    def state_to_normal_form(
         self, q: dict[Node, float] | list[float]
     ) -> dict[Node, float]:
         if isinstance(q, dict):
-            return q
-        else:
+            return {node: (q[node] if node in q else 0) for node in self._G.nodes}
+        elif len(q) == len(self):
             return {node: x for node, x in zip(self.node_descriptor.keys(), q)}
+        else:
+            raise ValueError(
+                f"expected list of proper length ({len(self)}), while got {q}"
+            )
 
     def flow(self, q: NDarrayT[AnyFloat]) -> NDarrayT[AnyFloat]:
         q = np.asarray(q)
@@ -162,18 +166,20 @@ class ResourceNetwork(Generic[Node]):
     def run_simulation(
         self, initial_state: dict[Node, float] | list[float], n_iters: int = 30
     ) -> StateArray[Node]:
-        if len(initial_state) != len(self._G.nodes):
+        if not isinstance(initial_state, dict) and len(initial_state) != len(
+            self._G.nodes
+        ):
             raise ValueError(
                 "Incorrect initial states: expected states for "
                 + str(self._G.nodes)
                 + ", while got:"
                 + str(initial_state)
             )
-        n = len(initial_state)
+        state_dict = self.state_to_normal_form(initial_state)
+        n = len(state_dict)
         state_arr = np.zeros((n_iters, n))
         flow_arr = np.zeros((n_iters, n, n))
 
-        state_dict = self._state_to_normal_form(initial_state)
         for j in range(n):
             state_arr[0, j] = state_dict[self.idx_descriptor[j]]
         for i in range(1, n_iters):
