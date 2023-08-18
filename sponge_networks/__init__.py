@@ -13,5 +13,7 @@ from .sponge_networks import (
     SpongeNetworkLayout,
     ResourceNetworkGreedy,
     SpongeNetwork2dBuilder,
+    SpongeNetworkTriangularBuilder,
+    LayoutTriangular,
     grid_with_positions,
 )
