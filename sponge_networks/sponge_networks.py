@@ -303,3 +303,50 @@ class SpongeNetworkTriangularBuilder(AbstractSpongeNetworkBuilder[LayoutTriangul
                     f"some strange edge encountered while building sponge network: {u} -> {v}"
                 )
         return grid
+
+
+@dataclass
+class LayoutHexagonal(SpongeNetworkLayout):
+    weights_horizontal: float
+    weights_up_down: float
+    weights_down_up: float
+
+
+@final
+@dataclass
+class SpongeNetworkHexagonalBuilder(AbstractSpongeNetworkBuilder[LayoutHexagonal]):
+    @override
+    def generate_initial_grid(self) -> nx.DiGraph:
+        return grid_with_positions(self.n_cols, self.n_rows, "hexagonal")
+
+    @override
+    def upper_nodes(self) -> list[SpongeNode]:
+        if self.n_cols == 1:
+            return [(i, self.n_rows * 2) for i in range(2)]
+        upper_nodes_len = (self.n_cols) // 2 * 2
+        return [(i + 1, self.n_rows * 2 + 1) for i in range(upper_nodes_len)]
+
+    @override
+    def bottom_nodes(self) -> list[SpongeNode]:
+        bottom_nodes_len = (self.n_cols + 1) // 2 * 2
+        return [(i, 0) for i in range(bottom_nodes_len)]
+
+    @override
+    def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph:
+        grid = cast(nx.DiGraph, grid.copy())
+        u: tuple[int, int]
+        v: tuple[int, int]
+        d: dict
+        for u, v, d in grid.edges(data=True):
+            (i1, j1), (i2, j2) = (u, v)
+            if j1 == j2:
+                d["weight"] = self.layout.weights_horizontal
+            elif j1 > j2:
+                d["weight"] = self.layout.weights_up_down
+            elif j1 < j2:
+                d["weight"] = self.layout.weights_down_up
+            else:
+                raise ValueError(
+                    f"some strange edge encountered while building sponge network: {u} -> {v}"
+                )
+        return grid

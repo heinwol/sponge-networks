@@ -6,14 +6,16 @@ from .resource_networks import (
     plot_simulation,
 )
 from .sponge_networks import (
-    SpongeNetwork,
     AbstractSpongeNetworkBuilder,
     Layout2d,
+    LayoutHexagonal,
     LayoutT,
-    SpongeNetworkLayout,
-    ResourceNetworkGreedy,
-    SpongeNetwork2dBuilder,
-    SpongeNetworkTriangularBuilder,
     LayoutTriangular,
+    ResourceNetworkGreedy,
+    SpongeNetwork,
+    SpongeNetwork2dBuilder,
+    SpongeNetworkHexagonalBuilder,
+    SpongeNetworkLayout,
+    SpongeNetworkTriangularBuilder,
     grid_with_positions,
 )
