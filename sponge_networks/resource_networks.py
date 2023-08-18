@@ -117,6 +117,9 @@ class ResourceNetwork(Generic[Node]):
         self, q: dict[Node, float] | list[float]
     ) -> dict[Node, float]:
         if isinstance(q, dict):
+            for node in q.keys():
+                if node not in self._G.nodes:
+                    raise ValueError(f"unknown node: '{node}'")
             return {node: (q[node] if node in q else 0) for node in self._G.nodes}
         elif len(q) == len(self):
             return {node: x for node, x in zip(self.node_descriptor.keys(), q)}
