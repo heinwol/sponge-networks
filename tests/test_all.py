@@ -3,7 +3,6 @@ from typing import Generator
 import pytest
 
 from sponge_networks.resource_networks import *
-from sponge_networks.network_manipulation import *
 from sponge_networks.utils.utils import *
 
 
