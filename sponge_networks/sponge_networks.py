@@ -188,11 +188,14 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
 
 
 class SpongeNetwork:
-    def __init__(self, builder: AbstractSpongeNetworkBuilder) -> None:
+    def __init__(
+        self, builder: AbstractSpongeNetworkBuilder, generate_sinks: bool = True
+    ) -> None:
         grid = builder.generate_initial_grid()
         grid = builder.generate_weights_from_layout(grid)
         grid = builder.generate_loops(grid)
-        grid = builder.generate_sinks(grid)
+        if generate_sinks:
+            grid = builder.generate_sinks(grid)
         grid = builder.final_grid_hook(grid)
 
         self.resource_network = ResourceNetworkGreedy(grid)
@@ -350,3 +353,48 @@ class SpongeNetworkHexagonalBuilder(AbstractSpongeNetworkBuilder[LayoutHexagonal
                     f"some strange edge encountered while building sponge network: {u} -> {v}"
                 )
         return grid
+
+
+class _LayoutDict(TypedDict):
+    weights_sink_edge: float
+    weights_loop: float
+    weights_horizontal: float
+    weights_up_down: float
+    weights_down_up: float
+
+
+def build_sponge_network(
+    sn_type: GridType,
+    n_cols: int,
+    n_rows: int,
+    layout: _LayoutDict,
+    generate_sinks: bool = True,
+) -> SpongeNetwork:
+    match sn_type:
+        case "grid_2d":
+            return SpongeNetwork(
+                SpongeNetwork2dBuilder(
+                    n_cols=n_cols,
+                    n_rows=n_rows,
+                    layout=Layout2d(**layout),
+                ),
+                generate_sinks=generate_sinks,
+            )
+        case "hexagonal":
+            return SpongeNetwork(
+                SpongeNetworkHexagonalBuilder(
+                    n_cols=n_cols,
+                    n_rows=n_rows,
+                    layout=LayoutHexagonal(**layout),
+                ),
+                generate_sinks=generate_sinks,
+            )
+        case "triangular":
+            return SpongeNetwork(
+                SpongeNetworkTriangularBuilder(
+                    n_cols=n_cols,
+                    n_rows=n_rows,
+                    layout=LayoutTriangular(**layout),
+                ),
+                generate_sinks=generate_sinks,
+            )

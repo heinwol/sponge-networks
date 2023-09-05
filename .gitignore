@@ -27,12 +27,16 @@
 
 **/__pypackages__
 
+# poetry builds
+**/dist
+
 
 ## custom
 .vscode
 .direnv
 
 temp
+**/*.xlsx
 
 # temp files
 **/.~*

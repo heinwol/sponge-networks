@@ -205,7 +205,7 @@ class StateArray(Generic[Node]):
             ),
         }
 
-    def simple_protocol(self):
+    def simple_protocol(self) -> pd.DataFrame:
         n_iters = len(self)
         vertices = lmap(get(self.idx_descriptor), range(len(self.idx_descriptor)))
         cols = ["t"] + vertices
@@ -214,6 +214,10 @@ class StateArray(Generic[Node]):
             data[i] = [i] + [self[i]["states"][[v]] for v in vertices]
         df = pd.DataFrame(columns=cols, data=data)
         return df.set_index("t")
+
+    def to_excel(self, filename: str) -> None:
+        df = self.simple_protocol()
+        df.to_excel(filename)
 
 
 def parallel_plot(
