@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from operator import getitem
 from typing_extensions import override
 from typing import (
@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 from IPython.core.display import SVG
 
-from toolz import curry, partition_all
+from toolz import curry, partition_all, valmap
 
 AnyFloat: TypeAlias = np.floating
 Node = TypeVar("Node", bound=Hashable)
@@ -180,7 +180,7 @@ class StateArray(Generic[Node]):
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
     states_arr: NDarrayT[AnyFloat]  # N x M
-    flow_arr: NDarrayT[AnyFloat]  # N x M x M
+    flow_arr: NDarrayT[AnyFloat] = field(repr=False)  # N x M x M
     total_output_res: NDarrayT[AnyFloat]  # M
 
     def __len__(self) -> int:
@@ -218,6 +218,28 @@ class StateArray(Generic[Node]):
     def to_excel(self, filename: str) -> None:
         df = self.simple_protocol()
         df.to_excel(filename)
+
+
+def preserve_pos_when_plotting(G: nx.DiGraph):
+    if all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
+        for node in G.nodes:
+            node_d: dict = G.nodes[node]
+            if isinstance(node_d["pos"], Sequence):
+                node_d["pos"] = f"{node_d['pos'][0]},{node_d['pos'][1]}!"
+            elif not isinstance(node_d["pos"], str):
+                raise ValueError(
+                    f"""
+                    Attribute "pos" of every node should be either Sequence or str,
+                    however on node '{node}' attribute "pos" is of type '{type(node_d["pos"])}'
+                    with value '{node_d["pos"]}'
+                    """
+                )
+    else:
+        layout = nx.nx_pydot.pydot_layout(G, prog="neato")
+        layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
+        for v in G.nodes:
+            pos = str(layout_new[v][0]) + "," + str(layout_new[v][1]) + "!"
+            G.nodes[v]["pos"] = pos
 
 
 def parallel_plot(

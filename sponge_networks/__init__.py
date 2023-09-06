@@ -1,9 +1,5 @@
 from . import utils
-from .resource_networks import (
-    ResourceNetwork,
-    ResourceNetworkWithIncome,
-    plot_simulation,
-)
+from .resource_networks import ResourceNetwork, ResourceNetworkWithIncome
 from .sponge_networks import (
     AbstractSpongeNetworkBuilder,
     Layout2d,

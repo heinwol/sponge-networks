@@ -204,6 +204,9 @@ class SpongeNetwork:
         self.bottom_nodes = builder.bottom_nodes()
         self.initial_state_processor = builder.initial_state_processor_provider()
 
+    def altered(self, callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]]) -> Self:
+        ...
+
     def run_sponge_simulation(
         self, initial_state: dict[SpongeNode, float] | list[float], n_iters: int = 30
     ) -> StateArray[SpongeNode]:
@@ -217,7 +220,7 @@ class SpongeNetwork:
         )
 
     def plot_simulation(self, sim: StateArray[SpongeNode], scale: float = 1.0) -> None:
-        plot_simulation(self.resource_network, sim, scale)
+        self.resource_network.plot_simulation(sim, scale)
 
 
 @dataclass
@@ -364,13 +367,13 @@ class _LayoutDict(TypedDict):
 
 
 def build_sponge_network(
-    sn_type: GridType,
+    grid_type: GridType,
     n_cols: int,
     n_rows: int,
     layout: _LayoutDict,
     generate_sinks: bool = True,
 ) -> SpongeNetwork:
-    match sn_type:
+    match grid_type:
         case "grid_2d":
             return SpongeNetwork(
                 SpongeNetwork2dBuilder(
@@ -398,3 +401,5 @@ def build_sponge_network(
                 ),
                 generate_sinks=generate_sinks,
             )
+        case _:
+            raise ValueError(f'unknown grid type: "{grid_type}"')

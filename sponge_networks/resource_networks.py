@@ -143,7 +143,7 @@ class ResourceNetwork(Generic[Node]):
     def __len__(self):
         return len(self.adjacency_matrix)
 
-    def altered(self, f: Callable[[nx.DiGraph], Optional[nx.DiGraph]]) -> Self:
+    def altered(self, callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]]) -> Self:
         """
         This function provides the only interface to modify the underlying graph.
         If you want to get a copy of the graph, refer to the
@@ -154,12 +154,12 @@ class ResourceNetwork(Generic[Node]):
         """
 
         G = self.G
-        result = f(G)
+        result = callback(G)
         if result is None:
             return type(self)(G)
         elif not isinstance(result, nx.DiGraph):
             raise ValueError(
-                f"""the input function {f} was supposed to return networkx.DiGraph,
+                f"""the input function {callback} was supposed to return networkx.DiGraph,
                 however it returned type '{type(result)}'
                 with value '{result}'"""
             )
@@ -222,7 +222,8 @@ class ResourceNetwork(Generic[Node]):
             "fixedsize": True,
         }
 
-        (prop_setter if prop_setter is not None else identity)(G)
+        if prop_setter is not None:
+            prop_setter(G)
 
         max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
         min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
@@ -233,25 +234,7 @@ class ResourceNetwork(Generic[Node]):
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
-        if all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
-            for node in G.nodes:
-                node_d: dict = G.nodes[node]
-                if isinstance(node_d["pos"], Sequence):
-                    node_d["pos"] = f"{node_d['pos'][0]},{node_d['pos'][1]}!"
-                elif not isinstance(node_d["pos"], str):
-                    raise ValueError(
-                        f"""
-                        Attribute "pos" of every node should be either Sequence or str,
-                        however on node '{node}' attribute "pos" is of type '{type(node_d["pos"])}'
-                        with value '{node_d["pos"]}'
-                        """
-                    )
-        else:
-            layout = nx.nx_pydot.pydot_layout(G, prog="neato")
-            layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
-            for v in G.nodes:
-                pos = str(layout_new[v][0]) + "," + str(layout_new[v][1]) + "!"
-                G.nodes[v]["pos"] = pos
+        preserve_pos_when_plotting(G)
 
         # adding big "void" transparent nodes to preserve layout when
         # width of a node is changed dynamically
@@ -290,14 +273,31 @@ class ResourceNetwork(Generic[Node]):
         )
         return cast(list[SVG], np.concatenate(cast(NDarrayT[SVG], answer)))
 
-    def plot(self):
+    def plot(self, scale: float = 1.7):
         G = self.G
 
-        G.graph["graph"] = {"layout": "neato", "scale": 1.7}  # type: ignore
+        G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
+
+        preserve_pos_when_plotting(G)
 
         for u, v in G.edges:
             G.edges[u, v]["label"] = G.edges[u, v]["weight"]
+
         return SVG(nx.nx_pydot.to_pydot(G).create_svg())
+
+    def plot_simulation(self, simulation: StateArray[Node], scale: float = 1.0) -> None:
+        pl = self.plot_with_states(simulation, scale=scale)
+        f = lambda i: pl[i]
+        interact(
+            f,
+            i=widgets.IntSlider(
+                min=0,
+                max=len(simulation) - 1,
+                step=1,
+                value=0,
+                description="№ of iteration",
+            ),
+        )
 
 
 class ResourceNetworkWithIncome(ResourceNetwork):
@@ -367,20 +367,3 @@ class ResourceNetworkWithIncome(ResourceNetwork):
             flow_arr,
             np.asarray(total_output_res),
         )
-
-
-def plot_simulation(
-    G: ResourceNetwork[Node], simulation: StateArray[Node], scale: float = 1.0
-) -> None:
-    pl = G.plot_with_states(simulation, scale=scale)
-    f = lambda i: pl[i]
-    interact(
-        f,
-        i=widgets.IntSlider(
-            min=0,
-            max=len(simulation) - 1,
-            step=1,
-            value=0,
-            description="№ of iteration",
-        ),
-    )
