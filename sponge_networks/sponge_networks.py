@@ -189,8 +189,27 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
 
 class SpongeNetwork:
     def __init__(
-        self, builder: AbstractSpongeNetworkBuilder, generate_sinks: bool = True
+        self,
+        resource_network: ResourceNetworkGreedy,
+        upper_nodes: Optional[list[SpongeNode]],
+        bottom_nodes: Optional[list[SpongeNode]],
+        initial_state_processor: Callable[
+            [list[float] | dict[SpongeNode, float]], dict[SpongeNode, float]
+        ],
     ) -> None:
+        """
+        ## Warning!
+        this constructor should **not** be used as is, unless you really know what you're doing
+        """
+        self.resource_network = resource_network
+        self.upper_nodes = upper_nodes
+        self.bottom_nodes = bottom_nodes
+        self.initial_state_processor = initial_state_processor
+
+    @classmethod
+    def build(
+        cls, builder: AbstractSpongeNetworkBuilder, generate_sinks: bool = True
+    ) -> Self:
         grid = builder.generate_initial_grid()
         grid = builder.generate_weights_from_layout(grid)
         grid = builder.generate_loops(grid)
@@ -198,11 +217,18 @@ class SpongeNetwork:
             grid = builder.generate_sinks(grid)
         grid = builder.final_grid_hook(grid)
 
-        self.resource_network = ResourceNetworkGreedy(grid)
+        resource_network = ResourceNetworkGreedy(grid)
 
-        self.upper_nodes = builder.upper_nodes()
-        self.bottom_nodes = builder.bottom_nodes()
-        self.initial_state_processor = builder.initial_state_processor_provider()
+        upper_nodes = builder.upper_nodes()
+        bottom_nodes = builder.bottom_nodes()
+        initial_state_processor = builder.initial_state_processor_provider()
+
+        return cls(
+            resource_network=resource_network,
+            upper_nodes=upper_nodes,
+            bottom_nodes=bottom_nodes,
+            initial_state_processor=initial_state_processor,
+        )
 
     def altered(self, callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]]) -> Self:
         ...
@@ -375,7 +401,7 @@ def build_sponge_network(
 ) -> SpongeNetwork:
     match grid_type:
         case "grid_2d":
-            return SpongeNetwork(
+            return SpongeNetwork.build(
                 SpongeNetwork2dBuilder(
                     n_cols=n_cols,
                     n_rows=n_rows,
@@ -384,7 +410,7 @@ def build_sponge_network(
                 generate_sinks=generate_sinks,
             )
         case "hexagonal":
-            return SpongeNetwork(
+            return SpongeNetwork.build(
                 SpongeNetworkHexagonalBuilder(
                     n_cols=n_cols,
                     n_rows=n_rows,
@@ -393,7 +419,7 @@ def build_sponge_network(
                 generate_sinks=generate_sinks,
             )
         case "triangular":
-            return SpongeNetwork(
+            return SpongeNetwork.build(
                 SpongeNetworkTriangularBuilder(
                     n_cols=n_cols,
                     n_rows=n_rows,
