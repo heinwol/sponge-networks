@@ -1,13 +1,17 @@
 from dataclasses import field
+import resource
 from typing import Literal, final
 from abc import ABC, abstractmethod
 import sponge_networks
 from sponge_networks.resource_networks import nx
 from sponge_networks.utils.utils import nx
+import warnings
 
 from .utils.utils import *
 from .resource_networks import *
 import abc
+
+from sponge_networks import resource_networks
 
 
 class ResourceNetworkGreedy(ResourceNetwork):
@@ -164,25 +168,6 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
         )
         return grid
 
-    def initial_state_processor_provider(
-        self,
-    ) -> Callable[[list[float] | dict[SpongeNode, float]], dict[SpongeNode, float]]:
-        upper_nodes = self.upper_nodes()
-
-        def initial_state_processor(
-            initial_state_short: list[float] | dict[SpongeNode, float],
-        ) -> dict[SpongeNode, float]:
-            if isinstance(initial_state_short, dict):
-                return initial_state_short
-            elif len(upper_nodes) == len(initial_state_short):
-                return dict(zip(upper_nodes, initial_state_short))
-            else:
-                raise ValueError(
-                    f"length of upper nodes ({len(upper_nodes)}) and initial state ({len(initial_state_short)}) should be equal"
-                )
-
-        return initial_state_processor
-
     def final_grid_hook(self, grid: nx.DiGraph) -> nx.DiGraph:
         return grid
 
@@ -191,11 +176,8 @@ class SpongeNetwork:
     def __init__(
         self,
         resource_network: ResourceNetworkGreedy,
-        upper_nodes: Optional[list[SpongeNode]],
+        upper_nodes: list[SpongeNode],
         bottom_nodes: Optional[list[SpongeNode]],
-        initial_state_processor: Callable[
-            [list[float] | dict[SpongeNode, float]], dict[SpongeNode, float]
-        ],
     ) -> None:
         """
         ## Warning!
@@ -204,7 +186,6 @@ class SpongeNetwork:
         self.resource_network = resource_network
         self.upper_nodes = upper_nodes
         self.bottom_nodes = bottom_nodes
-        self.initial_state_processor = initial_state_processor
 
     @classmethod
     def build(
@@ -221,17 +202,53 @@ class SpongeNetwork:
 
         upper_nodes = builder.upper_nodes()
         bottom_nodes = builder.bottom_nodes()
-        initial_state_processor = builder.initial_state_processor_provider()
 
         return cls(
             resource_network=resource_network,
             upper_nodes=upper_nodes,
             bottom_nodes=bottom_nodes,
-            initial_state_processor=initial_state_processor,
         )
 
-    def altered(self, callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]]) -> Self:
-        ...
+    def initial_state_processor(
+        self,
+        initial_state_short: list[float] | dict[SpongeNode, float],
+    ) -> dict[SpongeNode, float]:
+        if isinstance(initial_state_short, dict):
+            return initial_state_short
+        elif len(self.upper_nodes) == len(initial_state_short):
+            return dict(zip(self.upper_nodes, initial_state_short))
+        else:
+            raise ValueError(
+                f"length of upper nodes ({len(self.upper_nodes)}) and initial state ({len(initial_state_short)}) should be equal"
+            )
+
+    def altered(
+        self,
+        callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]],
+        new_upper_nodes: Optional[list[SpongeNode]] = None,
+    ) -> Self:
+        G = self.resource_network.G
+        res = callback(G)
+        if res:
+            G = res
+        if not all("pos" in G.nodes[node] for node in G.nodes):
+            warnings.warn(
+                'Not all resulting nodes have "pos" attribute, network will be drawn incorrectly',
+                RuntimeWarning,
+            )
+        if isinstance(new_upper_nodes, Iterable):
+            upper_nodes = list(new_upper_nodes)
+        else:
+            upper_nodes = [node for node in self.upper_nodes if node in G.nodes]
+        bottom_nodes = (
+            [node for node in self.bottom_nodes if node in G.nodes]
+            if self.bottom_nodes
+            else None
+        )
+        rn = type(self.resource_network)(G)
+        return type(self)(
+            resource_network=rn, upper_nodes=upper_nodes, bottom_nodes=bottom_nodes
+        )
 
     def run_sponge_simulation(
         self, initial_state: dict[SpongeNode, float] | list[float], n_iters: int = 30
