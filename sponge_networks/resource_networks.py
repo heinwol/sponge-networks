@@ -1,14 +1,14 @@
-from ast import Call
 import multiprocessing
 from typing import cast
+
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
+from IPython.lib import pretty
 from ipywidgets import interact, widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
+
 from .utils.utils import *
-from toolz import identity, valmap
-from IPython.lib import pretty
 
 # from scipy.sparse import sparray
 

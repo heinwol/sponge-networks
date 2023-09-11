@@ -1,17 +1,11 @@
-from dataclasses import field
-import resource
-from typing import Literal, final
-from abc import ABC, abstractmethod
-import sponge_networks
-from sponge_networks.resource_networks import nx
-from sponge_networks.utils.utils import nx
 import warnings
+from abc import ABC, abstractmethod
+from typing import Literal, final
 
-from .utils.utils import *
+import networkx as nx
+
 from .resource_networks import *
-import abc
-
-from sponge_networks import resource_networks
+from .utils.utils import *
 
 
 class ResourceNetworkGreedy(ResourceNetwork):

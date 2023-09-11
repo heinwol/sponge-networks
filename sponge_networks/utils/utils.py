@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from operator import getitem
-from typing_extensions import override
 from typing import (
     Annotated,
     Any,
@@ -11,21 +10,21 @@ from typing import (
     Iterator,
     Optional,
     Protocol,
+    Self,
     Sequence,
     TypeAlias,
-    TypeVar,
     TypedDict,
+    TypeVar,
     cast,
     overload,
-    Self,
 )
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 from IPython.core.display import SVG
-
 from toolz import curry, partition_all, valmap
+from typing_extensions import override
 
 AnyFloat: TypeAlias = np.floating
 Node = TypeVar("Node", bound=Hashable)

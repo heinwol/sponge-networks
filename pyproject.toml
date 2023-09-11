@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sponge-networks"
-version = "0.2.0"
+version = "0.2.1"
 description = "a generalization of the resource network model with greedy vertices"
 authors = ["heinwol <koreshkovhw@yandex.ru>"]
 license = "MIT"
