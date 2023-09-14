@@ -1,3 +1,4 @@
+import os
 import multiprocessing
 from typing import cast
 
@@ -261,7 +262,8 @@ class ResourceNetwork(Generic[Node]):
             G.edges[u, v]["fontcolor"] = "black"
             G.edges[u, v]["color"] = "#f3ad5c99"
 
-        n_pools = min(8, len(states.states_arr))
+        cpu_count = os.cpu_count()
+        n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
         pool_obj = multiprocessing.Pool(n_pools)
         answer: list[list[SVG]] = pool_obj.starmap(
             parallel_plot,
@@ -271,7 +273,7 @@ class ResourceNetwork(Generic[Node]):
                 parallelize_range(n_pools, range(len(res))),
             ),
         )
-        return cast(list[SVG], np.concatenate(cast(NDarrayT[SVG], answer)))
+        return np.concatenate(answer)  # type: ignore
 
     def plot(self, scale: float = 1.7):
         G = self.G

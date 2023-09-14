@@ -151,7 +151,9 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
                 It seems like a tuple is used as one of value descriptor keys.
                 At the same time, a tuple ('{key}') is passed to __getitem__.
                 To avoid ambiguity, such behavior is prohibited. Please use
-                list ('{list(key)}') instead.
+                list ('{list(key)}' if you meant to refer to several elements
+                or '[{key}]' if you desired to access element with index 
+                '{key}') instead.
                 """
             )
 
@@ -245,6 +247,8 @@ def parallel_plot(
     G: nx.DiGraph, states: StateArray[Node], rng: Sequence[int]
 ) -> list[SVG]:
     def my_fmt(x: AnyFloat | int) -> str:
+        if np.isclose(x, 0):
+            return "0"
         if isinstance(x, int):
             return str(x)
         x_int, x_frac = int(x), x % 1
@@ -262,7 +266,7 @@ def parallel_plot(
         if total_sum > 0
         else const(0.35)
     )
-    res: list[Optional[SVG]] = [None] * len(rng)
+    res: list[SVG] = [None] * len(rng)  # type: ignore
     for n_it, idx in enumerate(rng):
         state = states[idx]
         for v in G.nodes:
@@ -273,7 +277,10 @@ def parallel_plot(
 
                 G.nodes[v]["fillcolor"] = (
                     "#f0fff4"
-                    if state["states"][[v]] < state["total_output_res"][[v]]
+                    if (
+                        state["states"][[v]] < state["total_output_res"][[v]]
+                        and not np.isclose(state["total_output_res"][[v]], 0)
+                    )
                     else "#b48ead"
                 )
 
