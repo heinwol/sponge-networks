@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  sponge-networks-notebook:
+    stdin_open: true
+    tty: true
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+    user: root
+    ports:
+      - "8889:8888"
+    volumes:
+      - ~/Documents:/home/jovyan/Documents:rw
