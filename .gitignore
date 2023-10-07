@@ -41,3 +41,6 @@ temp
 # temp files
 **/.~*
 **/*#
+
+# archives
+**/*.tar.gz
