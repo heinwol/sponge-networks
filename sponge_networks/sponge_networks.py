@@ -111,6 +111,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
     n_cols: int
     n_rows: int
     layout: LayoutT
+    visual_sink_edge_length: float = 1
     # grid: nx.DiGraph = field(init=False)
 
     @abstractmethod
@@ -125,7 +126,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
     def bottom_nodes(self) -> list[SpongeNode]:
         """
         ## Warning
-        these nodes does not include sink nodes
+        these nodes do not include sink nodes
         """
         ...
 
@@ -142,7 +143,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
                 x, y = node_d["pos"]
             else:
                 x, y = node
-            return (x, y - 1)
+            return (x, y - self.visual_sink_edge_length)
 
         bottom_nodes = self.bottom_nodes()
         grid.add_nodes_from(
@@ -409,7 +410,13 @@ def build_sponge_network(
     n_rows: int,
     layout: _LayoutDict,
     generate_sinks: bool = True,
+    visual_sink_edge_length: Optional[float] = None,
 ) -> SpongeNetwork:
+    visual_sink_edge_length_dict = (
+        {}
+        if visual_sink_edge_length is None
+        else {"visual_sink_edge_length": visual_sink_edge_length}
+    )
     match grid_type:
         case "grid_2d":
             return SpongeNetwork.build(
@@ -417,6 +424,7 @@ def build_sponge_network(
                     n_cols=n_cols,
                     n_rows=n_rows,
                     layout=Layout2d(**layout),
+                    **visual_sink_edge_length_dict,
                 ),
                 generate_sinks=generate_sinks,
             )
@@ -426,6 +434,7 @@ def build_sponge_network(
                     n_cols=n_cols,
                     n_rows=n_rows,
                     layout=LayoutHexagonal(**layout),
+                    **visual_sink_edge_length_dict,
                 ),
                 generate_sinks=generate_sinks,
             )
@@ -435,6 +444,7 @@ def build_sponge_network(
                     n_cols=n_cols,
                     n_rows=n_rows,
                     layout=LayoutTriangular(**layout),
+                    **visual_sink_edge_length_dict,
                 ),
                 generate_sinks=generate_sinks,
             )
