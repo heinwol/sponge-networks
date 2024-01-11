@@ -9,6 +9,24 @@ from .utils.utils import *
 
 
 class ResourceNetworkGreedy(ResourceNetwork):
+    def __init__(self, G: nx.DiGraph | None = None):
+        self.adjacency_matrix_without_loops: NDarrayT[AnyFloat]
+        self.stochastic_matrix_without_loops: NDarrayT[AnyFloat]
+        super().__init__(G)
+
+    @override
+    def _recalculate_matrices(self: Mutated[Self]):
+        super()._recalculate_matrices()
+        adj_diag: NDarrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
+        self.adjacency_matrix_without_loops = self.adjacency_matrix - np.diagflat(
+            adj_diag
+        )
+        M_sum = self.adjacency_matrix_without_loops.sum(axis=1).reshape((-1, 1))
+        M_sum = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
+        self.stochastic_matrix_without_loops = (
+            self.adjacency_matrix_without_loops / M_sum
+        )
+
     @override
     def flow(self, q: NDarrayT[AnyFloat]) -> NDarrayT[AnyFloat]:
         q = np.asarray(q)
@@ -17,7 +35,7 @@ class ResourceNetworkGreedy(ResourceNetwork):
         q_contained: NDarrayT[AnyFloat] = np.minimum(q, adj_diag)
         q_rest: NDarrayT[AnyFloat] = q - q_contained  # type: ignore
         return np.minimum(  # type: ignore
-            q_rest * self.stochastic_matrix, self.adjacency_matrix
+            q_rest * self.stochastic_matrix_without_loops, self.adjacency_matrix
         ) + np.diag(q_contained)
 
 
