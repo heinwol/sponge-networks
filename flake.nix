@@ -3,60 +3,104 @@ rec {
 
   inputs = {
     nixpkgs.url = "nixpkgs";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    poetry2nix = {
+      url = "github:nix-community/poetry2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
-    let
+  outputs = inputs@{ flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      # flake = {
+      #   # Put your original flake attributes here.
+      # };
+      systems = inputs.nixpkgs.lib.systems.flakeExposed;
 
-      system = "x86_64-linux";
+      perSystem = { config, self', inputs', pkgs, system, ... }:
+        let
+          # pkgs = (import inputs.nixpkgs {
+          #   inherit system;
+          #   config.allowUnfree = true;
+          # });
+          lib = pkgs.lib;
+          poetry2nixLib = (inputs.poetry2nix.lib.mkPoetry2Nix { inherit pkgs; });
 
-      pkgs = nixpkgs.legacyPackages.${system};
+          buildInputs-base = with pkgs; [
+            graphviz
+          ];
 
-      buildInputs = with pkgs; [
-        graphviz
-      ];
+          p2n-overrides = poetry2nixLib.defaultPoetryOverrides.extend
+            (self: super: {
+              clipboard = super.clipboard.overridePythonAttrs (
+                old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ]; }
+              );
+            });
 
-      overrides = pkgs.poetry2nix.defaultPoetryOverrides.extend
-        (self: super: {
-          clipboard = super.clipboard.overridePythonAttrs (
-            old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ]; }
-          );
-        });
-
-      devShells.default = pkgs.mkShell {
-        packages = buildInputs ++ [
-          pkgs.poetry
-          (pkgs.poetry2nix.mkPoetryEnv {
+          poetryAttrs = {
             projectDir = ./.;
             python = pkgs.python311;
-            preferWheels = true; # else it fails
-            inherit overrides;
+            overrides = p2n-overrides;
+            preferWheels = true; # I don't want to compile all that
+          };
 
-            # for development;
-            # TODO: remove runtime dependency
-            # extraPackages = (p: [ p.python-lsp-server ]);
-          })
-        ];
-        shellHook = ''
-          echo "entering dev shell..."
-          # eval fish || true
-        '';
-      };
+          devEnv = poetry2nixLib.mkPoetryEnv poetryAttrs;
 
-      package-env = pkgs.poetry2nix.mkPoetryApplication {
-        projectDir = ./.;
-        preferWheels = true; # else it fails
-      };
+          devEnvPopulated =
+            (devEnv.env.overrideAttrs (oldAttrs: rec {
+              name = "py";
+              buildInputs = with pkgs;
+                buildInputs-base ++ [
 
-      sponge-networks = package-env;
+                ];
+            }));
 
-    in
-    {
-      devShells.${system} = devShells;
-      # packages.${system} = {
-      #   inherit sponge-networks;
-      #   default = sponge-networks;
-      #   # package-env = package-env.dependencyEnv;
-      # };
+          # devShells.default = pkgs.mkShell {
+          #   packages = buildInputs ++ [
+          #     pkgs.poetry
+          #     (pkgs.poetry2nix.mkPoetryEnv {
+          #       projectDir = ./.;
+          #       python = pkgs.python311;
+          #       preferWheels = true; # else it fails
+          #       inherit overrides;
+
+          #       # for development;
+          #       # TODO: remove runtime dependency
+          #       # extraPackages = (p: [ p.python-lsp-server ]);
+          #     })
+          #   ];
+          #   shellHook = ''
+          #     echo "entering dev shell..."
+          #     # eval fish || true
+          #   '';
+          # };
+
+          app = (poetry2nixLib.mkPoetryApplication poetryAttrs).overrideAttrs
+            (oldAttrs: rec {
+              buildInputs = with pkgs;
+                buildInputs-base ++ [
+
+                ];
+            });
+
+          sponge-networks = app;
+
+        in
+        {
+          devShells = {
+            default = devEnvPopulated;
+          };
+          apps = {
+            default = sponge-networks;
+          };
+
+          # packages.${system} = {
+          #   inherit sponge-networks;
+          #   default = sponge-networks;
+          #   # package-env = package-env.dependencyEnv;
+          # };
+        };
     };
+
+
 }
