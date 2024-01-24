@@ -8,5 +8,12 @@
     "result",
     ".nix-env"
   ],
-  "python.formatting.provider": "none"
+  "mypy-type-checker.path": [
+    ".nix-env/bin/mypy"
+  ],
+  "mypy-type-checker.interpreter": [
+    ".nix-env/bin/python"
+  ],
+  "mypy.dmypyExecutable": "${workspaceFolder}/.nix-env/bin/dmypy",
+  "python.languageServer": "Default",
 }

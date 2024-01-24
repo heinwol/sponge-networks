@@ -24,6 +24,7 @@ typing-extensions = "^4.7.1"
 openpyxl = "^3.1.2"
 typeguard = "^4.0.0"
 pygraphviz = "^1.11"
+returns = "^0.22.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -37,6 +38,12 @@ pytest = "^7.4.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+plugins = ["returns.contrib.mypy.returns_plugin"]
+allow_redefinition = true
+# allow_untyped_globals = true
+ignore_missing_imports = true
 
 
 [build-system]
