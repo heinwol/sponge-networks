@@ -94,6 +94,10 @@ rec {
             default = sponge-networks;
           };
 
+          packages = {
+            devEnv = devEnv;
+          };
+
           # packages.${system} = {
           #   inherit sponge-networks;
           #   default = sponge-networks;

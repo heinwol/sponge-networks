@@ -1,0 +1,12 @@
+{
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "python.analysis.exclude": [
+    "submodules",
+    ".direnv",
+    "result",
+    ".nix-env"
+  ],
+  "python.formatting.provider": "none"
+}

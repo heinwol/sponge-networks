@@ -30,17 +30,20 @@
 # poetry builds
 **/dist
 
-
-## custom
-.vscode
-.direnv
-
-temp
-**/*.xlsx
-
 # temp files
 **/.~*
 **/*#
 
 # archives
 **/*.tar.gz
+
+# nix builds
+.result*
+
+## custom
+!.vscode
+.task
+.direnv
+
+temp
+**/*.xlsx
