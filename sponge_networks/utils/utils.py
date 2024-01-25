@@ -21,12 +21,14 @@ from typing import (
 
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from IPython.core.display import SVG
 from toolz import curry, partition_all, valmap
 from typing_extensions import override
 
-AnyFloat: TypeAlias = np.floating
+# Num = TypeVar("Num", bound=npt.NBitBase)
+AnyFloat: TypeAlias = np._NumberType
 Node = TypeVar("Node", bound=Hashable)
 FlowMatrix: TypeAlias = Sequence[Sequence[Sequence[float]]]
 T = TypeVar("T", bound=Any)

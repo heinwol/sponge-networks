@@ -11,7 +11,9 @@ class ProtocolPair(TypedDict):
     standard_protocol: pd.DataFrame
 
 
-def resourceDiGraph_from_array(arr: npt.ArrayLike) -> ResourceNetwork:
+def resourceDiGraph_from_array(
+    arr: npt.ArrayLike | list[list[AnyFloat]],
+) -> ResourceNetwork:
     ig = np.asarray(arr)
     rn = ResourceNetwork(nx.from_numpy_array(ig, create_using=nx.DiGraph))
     return rn
