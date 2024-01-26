@@ -15,7 +15,7 @@ class ResourceNetworkGreedy(ResourceNetwork):
         super().__init__(G)
 
     @override
-    def _recalculate_matrices(self: Mutated[Self]):
+    def _recalculate_matrices(self) -> None:
         super()._recalculate_matrices()
         adj_diag: NDarrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
         self.adjacency_matrix_without_loops = self.adjacency_matrix - np.diagflat(

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import itertools
 from operator import getitem
 from typing import (
     Annotated,
@@ -106,6 +107,10 @@ def const(x: T) -> Callable[..., T]:
         return x
 
     return inner
+
+
+def flatten(x: Sequence[Sequence[T]]) -> list[T]:
+    return list(itertools.chain.from_iterable(x))
 
 
 class DescriptorPair(TypedDict, Generic[Node]):
@@ -241,8 +246,7 @@ def preserve_pos_when_plotting(G: nx.DiGraph):
         layout = nx.nx_pydot.pydot_layout(G, prog="neato")
         layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
         for v in G.nodes:
-            pos = str(layout_new[v][0]) + "," + str(layout_new[v][1]) + "!"
-            G.nodes[v]["pos"] = pos
+            G.nodes[v]["pos"] = f"{layout_new[v][0]},{layout_new[v][1]}!"
 
 
 def parallel_plot(
@@ -275,7 +279,7 @@ def parallel_plot(
             v = cast(Node, v)
             if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
                 G.nodes[v]["label"] = my_fmt(cast(AnyFloat, state["states"][[v]]))
-                G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))
+                G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))  # type: ignore
 
                 G.nodes[v]["fillcolor"] = (
                     "#f0fff4"

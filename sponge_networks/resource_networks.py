@@ -21,9 +21,10 @@ class ResourceNetwork(Generic[Node]):
         if G is None:
             G = nx.DiGraph()
         self._G: nx.DiGraph = G.copy()  # type: ignore
-        self.node_descriptor, self.idx_descriptor = ResourceNetwork._descriptor_pair(
+        dp: tuple[dict[Node, int], list[Node]] = ResourceNetwork._descriptor_pair(
             self._G.nodes
         )
+        self.node_descriptor, self.idx_descriptor = dp
         for u, v, d in self._G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
@@ -46,7 +47,7 @@ class ResourceNetwork(Generic[Node]):
             idx_descriptor[i] = node
         return (node_descriptor, idx_descriptor)
 
-    def _recalculate_matrices(self: Mutated[Self]):
+    def _recalculate_matrices(self) -> None:
         M: NDarrayT[AnyFloat] = nx.adjacency_matrix(self._G).toarray()
         self.adjacency_matrix = M
         M_sum = M.sum(axis=1).reshape((-1, 1))
@@ -77,9 +78,6 @@ class ResourceNetwork(Generic[Node]):
         the ResourceNetwork instance
         """
         return self._G.copy()  # type: ignore
-
-    def to_child(self, cls: ResourceNetworkType) -> ResourceNetworkType:
-        return cls(self._G)
 
     def r_in(self) -> NDarrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=0)
@@ -273,7 +271,7 @@ class ResourceNetwork(Generic[Node]):
                 parallelize_range(n_pools, range(len(res))),
             ),
         )
-        return np.concatenate(answer)  # type: ignore
+        return flatten(answer)
 
     def plot(self, scale: float = 1.7):
         G = self.G
@@ -334,7 +332,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
             state_arr[0, j] = state_dict[self.idx_descriptor[j]]
 
         total_output_res = cast(
-            NDarrayT[float],
+            NDarrayT[float],  # type: ignore
             np.array(
                 [
                     sum(map(lambda v: self._G[u][v]["weight"], self._G[u]))
