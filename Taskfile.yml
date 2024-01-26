@@ -13,6 +13,8 @@ tasks:
     sources:
       - flake.nix
       - flake.lock
+      - poetry.lock
+      - pyproject.toml
     generates:
       - .nix-env
 
