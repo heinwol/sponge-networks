@@ -46,6 +46,9 @@ rec {
                 buildInputs-base ++ [
 
                 ];
+              shellHook = ''
+                export MYPYPATH=$PWD/sponge_networks/
+              '';
             }));
 
           app = (poetry2nixLib.mkPoetryApplication poetryAttrs).overrideAttrs

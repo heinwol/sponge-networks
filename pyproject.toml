@@ -25,6 +25,7 @@ openpyxl = "^3.1.2"
 typeguard = "^4.0.0"
 pygraphviz = "^1.11"
 returns = "^0.22.0"
+expression = "^5.0.2"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -44,6 +45,7 @@ plugins = ["returns.contrib.mypy.returns_plugin"]
 allow_redefinition = true
 # allow_untyped_globals = true
 ignore_missing_imports = true
+disallow_untyped_calls = false
 
 
 [build-system]

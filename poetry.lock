@@ -237,6 +237,24 @@ files = [
 tests = ["asttokens", "littleutils", "pytest", "rich"]
 
 [[package]]
+name = "expression"
+version = "5.0.2"
+description = "Practical functional programming for Python 3.11+"
+optional = false
+python-versions = ">=3.11,<4"
+files = [
+    {file = "expression-5.0.2-py3-none-any.whl", hash = "sha256:2b54eeccb6247d86f598a3ce1a4e1efc56e4c7ca901f622d8203919d4106e147"},
+    {file = "expression-5.0.2.tar.gz", hash = "sha256:37019851b0794820c1167b185d6be4a22111604f3bab221f4136e429e5d9b57f"},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.1.1,<5.0.0"
+
+[package.extras]
+all = ["pydantic (>=2.0.0,<3.0.0)"]
+pydantic = ["pydantic (>=2.0.0,<3.0.0)"]
+
+[[package]]
 name = "iniconfig"
 version = "2.0.0"
 description = "brain-dead simple config-ini parsing"
@@ -1220,4 +1238,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "cec06b08884738e8033bc3a45d3f09e9039b5914d379eb5fd0f1bd3ed31e0fbb"
+content-hash = "efc9801f31ea01d5ca03f9c762176ca5f64626600d56dd0ee7612472c33ed5c8"
