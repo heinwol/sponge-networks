@@ -13,8 +13,6 @@ from .utils.utils import *
 
 # from scipy.sparse import sparray
 
-ResourceNetworkType = TypeVar("ResourceNetworkType", bound=type["ResourceNetwork"])
-
 
 class ResourceNetwork(Generic[Node]):
     def __init__(self, G: Optional[nx.DiGraph] = None):

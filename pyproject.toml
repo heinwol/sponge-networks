@@ -31,6 +31,7 @@ expression = "^5.0.2"
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
 mypy = "^1.8.0"
+black = "^24.1.1"
 
 
 [tool.poetry.group.test.dependencies]
