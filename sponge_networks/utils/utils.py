@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import itertools
 from operator import getitem
+from os import PathLike
 from typing import (
     Annotated,
     Any,
@@ -29,7 +30,6 @@ from toolz import curry, partition_all, valmap
 from typing_extensions import override
 
 # Num = TypeVar("Num", bound=npt.NBitBase)
-AnyFloat: TypeAlias = np._NumberType
 Node = TypeVar("Node", bound=Hashable)
 FlowMatrix: TypeAlias = Sequence[Sequence[Sequence[float]]]
 T = TypeVar("T", bound=Any)
@@ -38,8 +38,11 @@ T2 = TypeVar("T2", bound=Any)
 ValT = TypeVar("ValT", bound=Any)
 K = TypeVar("K", bound=Any, contravariant=True)
 V = TypeVar("V", bound=Any, covariant=True)
-NDarrayT = np.ndarray[Any, np.dtype[T]]
+# NDarrayT = np.ndarray[Any, np.dtype[T]]
+NDArrayT: TypeAlias = npt.NDArray[T]
 Mutated = Annotated[T, "this variable is subject to change"]
+
+AnyFloat: TypeAlias = np.float64
 
 
 def lmap(f: Callable[[T1], T2], x: Iterable[T1]) -> list[T2]:
@@ -136,7 +139,7 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
     def __init__(
         self,
         val_descriptor: dict[Node, int],
-        arr: NDarrayT[ValT],
+        arr: NDArrayT[ValT],
         dims_affected: Optional[tuple[int, ...]] = None,
     ):
         self.val_descriptor = val_descriptor
@@ -149,7 +152,7 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
     def __len__(self) -> int:
         return len(self.arr)
 
-    def __getitem__(self, key: Node | list[Node]) -> NDarrayT[ValT] | ValT:
+    def __getitem__(self, key: Node | list[Node]) -> NDArrayT[ValT] | ValT:
         # [0, 2] => (arr['lala', 5, 1] => arr[desc['lala'], 5, desc[12]])
         #
         if self._tuple_is_used and type(key) == tuple:
@@ -187,31 +190,53 @@ class StateArraySlice(TypedDict, Generic[Node]):
 class StateArray(Generic[Node]):
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
-    states_arr: NDarrayT[AnyFloat]  # N x M
-    flow_arr: NDarrayT[AnyFloat] = field(repr=False)  # N x M x M
-    total_output_res: NDarrayT[AnyFloat]  # M
+    states_arr: NDArrayT[AnyFloat]  # N x M
+    flow_arr: NDArrayT[AnyFloat] = field(repr=False)  # N x M x M
+    total_output_res: NDArrayT[AnyFloat]  # M
 
     def __len__(self) -> int:
         return len(self.states_arr)
 
+    @overload
     def __getitem__(self, time: int) -> StateArraySlice[Node]:
-        return {
-            "states": SimpleNodeArrayDescriptor(
-                self.node_descriptor,
-                self.states_arr[time],
-                (0,),
-            ),
-            "flow": SimpleNodeArrayDescriptor(
-                self.node_descriptor,
-                self.flow_arr[time],
-                (0, 1),
-            ),
-            "total_output_res": SimpleNodeArrayDescriptor(
-                self.node_descriptor,
-                self.total_output_res,
-                (0,),
-            ),
-        }
+        ...
+
+    @overload
+    def __getitem__(self, time: slice) -> list[StateArraySlice[Node]]:
+        ...
+
+    def __getitem__(
+        self, time: int | slice
+    ) -> StateArraySlice[Node] | list[StateArraySlice[Node]]:
+        def get_StateArraySlice_at_time(t: int) -> StateArraySlice[Node]:
+            return {
+                "states": SimpleNodeArrayDescriptor(
+                    self.node_descriptor,
+                    self.states_arr[time],
+                    (0,),
+                ),
+                "flow": SimpleNodeArrayDescriptor(
+                    self.node_descriptor,
+                    self.flow_arr[time],
+                    (0, 1),
+                ),
+                "total_output_res": SimpleNodeArrayDescriptor(
+                    self.node_descriptor,
+                    self.total_output_res,
+                    (0,),
+                ),
+            }
+
+        match time:
+            case int():
+                return get_StateArraySlice_at_time(time)
+            case slice():
+                start = time.start if time.start else 0
+                step = time.step if time.step else 1
+                rng = range(start, time.stop, step)
+                return list(map(get_StateArraySlice_at_time, rng))
+            case _:
+                raise ValueError(f"unknown slice type: {type(time)}")
 
     def simple_protocol(self) -> pd.DataFrame:
         n_iters = len(self)

@@ -1,6 +1,7 @@
 import os
 import multiprocessing
 from typing import cast
+from expression import identity
 
 import networkx as nx
 import numpy as np
@@ -26,8 +27,8 @@ class ResourceNetwork(Generic[Node]):
         for u, v, d in self._G.edges(data=True):
             if "weight" not in d:
                 d["weight"] = np.random.randint(1, 10)
-        self.stochastic_matrix: NDarrayT[AnyFloat]
-        self.adjacency_matrix: NDarrayT[AnyFloat]
+        self.stochastic_matrix: NDArrayT[AnyFloat]
+        self.adjacency_matrix: NDArrayT[AnyFloat]
         self._recalculate_matrices()
 
     @staticmethod
@@ -46,7 +47,7 @@ class ResourceNetwork(Generic[Node]):
         return (node_descriptor, idx_descriptor)
 
     def _recalculate_matrices(self) -> None:
-        M: NDarrayT[AnyFloat] = nx.adjacency_matrix(self._G).toarray()
+        M: NDArrayT[AnyFloat] = nx.adjacency_matrix(self._G).toarray()
         self.adjacency_matrix = M
         M_sum = M.sum(axis=1).reshape((-1, 1))
         M_sum: Any = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
@@ -77,13 +78,13 @@ class ResourceNetwork(Generic[Node]):
         """
         return self._G.copy()  # type: ignore
 
-    def r_in(self) -> NDarrayT[AnyFloat]:
+    def r_in(self) -> NDArrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=0)
 
-    def r_out(self) -> NDarrayT[AnyFloat]:
+    def r_out(self) -> NDArrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=1)
 
-    def one_limit_state(self) -> NDarrayT[AnyFloat]:
+    def one_limit_state(self) -> NDArrayT[AnyFloat]:
         if not nx.is_aperiodic(self._G):
             raise ValueError(
                 "Graph must be aperiodic for calculation of one limit state"
@@ -91,7 +92,7 @@ class ResourceNetwork(Generic[Node]):
         n = len(self.adjacency_matrix)
 
         eigval, eigvect = cast(
-            tuple[NDarrayT[AnyFloat], NDarrayT[AnyFloat]],
+            tuple[NDArrayT[AnyFloat], NDArrayT[AnyFloat]],
             sparce_eigs(self.stochastic_matrix.T, k=1, sigma=1.1),
         )
 
@@ -125,14 +126,14 @@ class ResourceNetwork(Generic[Node]):
                 f"expected list of proper length ({len(self)}), while got {q}"
             )
 
-    def flow(self, q: NDarrayT[AnyFloat]) -> NDarrayT[AnyFloat]:
+    def flow(self, q: NDArrayT[AnyFloat]) -> NDArrayT[AnyFloat]:
         q = np.asarray(q)
         q = q.reshape((-1, 1))
         return np.minimum(q * self.stochastic_matrix, self.adjacency_matrix)
 
     def S(
-        self, q: npt.ArrayLike, flow: Optional[NDarrayT[AnyFloat]] = None
-    ) -> NDarrayT[AnyFloat]:
+        self, q: npt.ArrayLike, flow: Optional[NDArrayT[AnyFloat]] = None
+    ) -> NDArrayT[AnyFloat]:
         q = np.asarray(q)
         flow = self.flow(q) if flow is None else flow
         return q + flow.sum(axis=0) - flow.sum(axis=1)
@@ -185,7 +186,7 @@ class ResourceNetwork(Generic[Node]):
         for i in range(1, n_iters):
             flow_arr[i] = self.flow(state_arr[i - 1])
             state_arr[i] = self.S(state_arr[i - 1], flow=flow_arr[i])
-        total_output_res: NDarrayT[AnyFloat] = np.array(
+        total_output_res: NDArrayT[AnyFloat] = np.array(
             [
                 sum(map(lambda v: self._G[u][v]["weight"], self._G[u]))
                 for u in self.idx_descriptor
@@ -231,7 +232,7 @@ class ResourceNetwork(Generic[Node]):
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
-        preserve_pos_when_plotting(G)
+        # preserve_pos_when_plotting(G)
 
         # adding big "void" transparent nodes to preserve layout when
         # width of a node is changed dynamically
@@ -262,7 +263,8 @@ class ResourceNetwork(Generic[Node]):
         n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
         pool_obj = multiprocessing.Pool(n_pools)
         answer: list[list[SVG]] = pool_obj.starmap(
-            parallel_plot,
+            # parallel_plot,
+            identity,  # type: ignore
             zip(
                 const_iter(G),
                 const_iter(states),
@@ -271,12 +273,12 @@ class ResourceNetwork(Generic[Node]):
         )
         return flatten(answer)
 
-    def plot(self, scale: float = 1.7):
+    def plot(self, scale: float = 1.7) -> SVG:
         G = self.G
 
         G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
 
-        preserve_pos_when_plotting(G)
+        # preserve_pos_when_plotting(G)
 
         for u, v in G.edges:
             G.edges[u, v]["label"] = G.edges[u, v]["weight"]
@@ -330,7 +332,7 @@ class ResourceNetworkWithIncome(ResourceNetwork):
             state_arr[0, j] = state_dict[self.idx_descriptor[j]]
 
         total_output_res = cast(
-            NDarrayT[float],  # type: ignore
+            NDArrayT[float],  # type: ignore
             np.array(
                 [
                     sum(map(lambda v: self._G[u][v]["weight"], self._G[u]))

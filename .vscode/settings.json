@@ -13,7 +13,7 @@
   //   // "--exclude",
   //   // "__init__.py",
   // ],
-  "python.languageServer": "Default",
+  // "python.languageServer": "Default",
   "python.analysis.typeCheckingMode": "basic",
   "python.defaultInterpreterPath": "${workspaceFolder}/.nix-env/bin/python",
 }

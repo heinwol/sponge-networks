@@ -1,12 +1,11 @@
 from .utils import (
     AnyFloat,
     FlowMatrix,
-    NDarrayT,
+    NDArrayT,
     Node,
     SimpleNodeArrayDescriptor,
     StateArray,
     StateArraySlice,
     TypedMapping,
-    parallel_plot,
     DescriptorPair,
 )

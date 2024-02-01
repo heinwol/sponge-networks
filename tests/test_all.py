@@ -12,7 +12,7 @@ class ProtocolPair(TypedDict):
 
 
 def resourceDiGraph_from_array(
-    arr: npt.ArrayLike | list[list[AnyFloat]],
+    arr: npt.ArrayLike | list[list[AnyFloat | int]],
 ) -> ResourceNetwork[int]:
     ig = np.asarray(arr)
     rn = ResourceNetwork[int](nx.from_numpy_array(ig, create_using=nx.DiGraph))

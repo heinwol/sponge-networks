@@ -10,30 +10,32 @@ from .utils.utils import *
 
 class ResourceNetworkGreedy(ResourceNetwork):
     def __init__(self, G: nx.DiGraph | None = None):
-        self.adjacency_matrix_without_loops: NDarrayT[AnyFloat]
-        self.stochastic_matrix_without_loops: NDarrayT[AnyFloat]
+        self.adjacency_matrix_without_loops: NDArrayT[AnyFloat]
+        self.stochastic_matrix_without_loops: NDArrayT[AnyFloat]
         super().__init__(G)
 
     @override
     def _recalculate_matrices(self) -> None:
         super()._recalculate_matrices()
-        adj_diag: NDarrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
+        adj_diag: NDArrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
         self.adjacency_matrix_without_loops = self.adjacency_matrix - np.diagflat(
             adj_diag
         )
-        M_sum = self.adjacency_matrix_without_loops.sum(axis=1).reshape((-1, 1))
+        M_sum = self.adjacency_matrix_without_loops.sum(axis=1).reshape(  # type: ignore
+            (-1, 1)
+        )
         M_sum = np.where(np.isclose(M_sum, 0), np.inf, M_sum)
         self.stochastic_matrix_without_loops = (
             self.adjacency_matrix_without_loops / M_sum
         )
 
     @override
-    def flow(self, q: NDarrayT[AnyFloat]) -> NDarrayT[AnyFloat]:
+    def flow(self, q: NDArrayT[AnyFloat]) -> NDArrayT[AnyFloat]:
         q = np.asarray(q)
         q = q.reshape((-1, 1))
-        adj_diag: NDarrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
-        q_contained: NDarrayT[AnyFloat] = np.minimum(q, adj_diag)
-        q_rest: NDarrayT[AnyFloat] = q - q_contained  # type: ignore
+        adj_diag: NDArrayT[AnyFloat] = np.diag(self.adjacency_matrix).reshape((-1, 1))
+        q_contained: NDArrayT[AnyFloat] = np.minimum(q, adj_diag)
+        q_rest: NDArrayT[AnyFloat] = q - q_contained  # type: ignore
         return np.minimum(  # type: ignore
             q_rest * self.stochastic_matrix_without_loops, self.adjacency_matrix
         ) + np.diag(q_contained)
