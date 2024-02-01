@@ -1,7 +1,8 @@
-from abc import ABCMeta
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import multiprocessing
 import os
-from typing import Callable, Optional, Sequence, cast
+from typing import Any, Callable, Generic, Optional, Sequence, cast, TypeVar
 import networkx as nx
 import numpy as np
 from toolz import valmap
@@ -17,6 +18,7 @@ from sponge_networks.utils.utils import (
     T2,
     AnyFloat,
     Mutated,
+    NDArrayT,
     Node,
     StateArray,
     StateArraySlice,
@@ -75,18 +77,88 @@ def _ensure_graph_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
     return G
 
 
-def parallel_plot(
-    G: nx.DiGraph, states: list[StateArraySlice[Node]], rng: Sequence[int]
-) -> list[SVG]:
-    total_sum = states[0]["states"].arr.sum()
+@dataclass
+class DisplayContext(ABC):
+    """
+    Unique for each DisplayGraphTask instance. Usually some graph
+    or whatever
+    """
+
+    original_graph: nx.DiGraph
+
+
+DisplayContextT = TypeVar("DisplayContextT", bound=DisplayContext)
+
+
+@dataclass
+class DisplaySimulationContext(ABC, Generic[DisplayContextT]):
+    display_context: DisplayContextT
+
+
+DisplaySimulationContextT = TypeVar(
+    "DisplaySimulationContextT", bound=DisplaySimulationContext
+)
+
+
+@dataclass
+class DisplayGraphTask(ABC, Generic[DisplayContextT]):
+    display_context: DisplayContextT
+
+
+@dataclass
+class DisplaySimulationTask(ABC, Generic[DisplaySimulationContextT]):
+    display_simulation_context: DisplaySimulationContextT
+
+
+# @dataclass
+# class SimulationDisplayer(ABC, Generic[DisplaySimulationContextT]):
+#     display_context: DisplaySimulationContextT
+
+
+# class DisplayUpdaterTask(ABC):
+#     ...
+
+
+# @dataclass
+# class DisplaySimulationUpdater(ABC):
+#     context: DisplayContext
+
+#     @abstractmethod
+#     def update_layout(
+#         self, G: nx.DiGraph, upd: DisplayUpdaterTask
+#     ) -> DisplayUpdaterTask:
+#         ...
+
+#     @abstractmethod
+#     def update_edges(
+#         self, G: nx.DiGraph, upd: DisplayUpdaterTask
+#     ) -> DisplayUpdaterTask:
+#         ...
+
+#     @abstractmethod
+#     def update_verticies(
+#         self, G: nx.DiGraph, upd: DisplayUpdaterTask
+#     ) -> DisplayUpdaterTask:
+#         ...
+
+_DisplayResultT = TypeVar("_DisplayResultT", bound=Any)
+
+
+class DisplayHandler(ABC, Generic[_DisplayResultT]):
+    @abstractmethod
+    def display(self) -> _DisplayResultT:
+        ...
+
+
+def parallel_plot(G: nx.DiGraph, states: list[StateArraySlice[Node]]) -> list[SVG]:
+    total_sum: float = states[0]["states"].arr.sum()
     calc_node_width = (
         linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
         if total_sum > 0
         else const(0.35)
     )
-    res: list[SVG] = [None] * len(rng)  # type: ignore
-    for n_it, idx in enumerate(rng):
-        state = states[idx]
+    res: list[SVG] = [None] * len(states)  # type: ignore
+    for n_it, state in enumerate(states):
         for v in G.nodes:
             v = cast(Node, v)
             if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
@@ -126,7 +198,7 @@ class DisplayableGraph:
     ) -> list[SVG]:
         G: nx.DiGraph = self.G
 
-        G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
+        G.graph["graph"] = {"scale": scale}  # type: ignore
 
         G.graph["node"] = {  # type: ignore
             "fontsize": 10,
@@ -148,7 +220,7 @@ class DisplayableGraph:
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
-        _ensure_graph_layout(G)
+        G = _ensure_graph_layout(G)
 
         # adding big "void" transparent nodes to preserve layout when
         # width of a node is changed dynamically
@@ -178,7 +250,7 @@ class DisplayableGraph:
         cpu_count = os.cpu_count()
         n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
         pool_obj = multiprocessing.Pool(n_pools)
-        answer: list[list[SVG]] = pool_obj.starmap(
+        svgs: list[list[SVG]] = pool_obj.starmap(
             parallel_plot,
             zip(
                 const_iter(G),
@@ -186,20 +258,16 @@ class DisplayableGraph:
                 parallelize_range(n_pools, range(len(states))),
             ),
         )
-        return flatten(answer)
+        return flatten(svgs)
 
     def plot(self, scale: float = 1.7) -> SVG:
         G = self.G
 
-        G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
+        G.graph["graph"] = {"scale": scale}  # type: ignore
 
-        # preserve_pos_when_plotting(G)
+        G = _ensure_graph_layout(G)
 
         for u, v in G.edges:
             G.edges[u, v]["label"] = G.edges[u, v]["weight"]
 
         return SVG(nx.nx_pydot.to_pydot(G).create_svg())
-
-
-class DisplayTask(ABCMeta):
-    pass
