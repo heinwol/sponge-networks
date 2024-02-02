@@ -232,7 +232,7 @@ class ResourceNetwork(Generic[Node]):
                 (min_weight, 0.8), (max_weight, 4.5)
             )
 
-        # preserve_pos_when_plotting(G)
+        preserve_pos_when_plotting(G)
 
         # adding big "void" transparent nodes to preserve layout when
         # width of a node is changed dynamically
@@ -263,8 +263,8 @@ class ResourceNetwork(Generic[Node]):
         n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
         pool_obj = multiprocessing.Pool(n_pools)
         answer: list[list[SVG]] = pool_obj.starmap(
-            # parallel_plot,
-            identity,  # type: ignore
+            parallel_plot,
+            # identity,  # type: ignore
             zip(
                 const_iter(G),
                 const_iter(states),
@@ -278,7 +278,7 @@ class ResourceNetwork(Generic[Node]):
 
         G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
 
-        # preserve_pos_when_plotting(G)
+        preserve_pos_when_plotting(G)
 
         for u, v in G.edges:
             G.edges[u, v]["label"] = G.edges[u, v]["weight"]

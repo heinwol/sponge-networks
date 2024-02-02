@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import multiprocessing
 import os
-from typing import Any, Callable, Generic, Optional, Sequence, cast, TypeVar
+from typing import Any, Callable, Generic, Optional, Sequence, cast, TypeVar, final
 import networkx as nx
 import numpy as np
 from toolz import valmap
@@ -148,6 +148,22 @@ class DisplayHandler(ABC, Generic[_DisplayResultT]):
     @abstractmethod
     def display(self) -> _DisplayResultT:
         ...
+
+
+### Concrete implementations:
+
+
+@dataclass
+class DisplayContextGraphviz(DisplayContext):
+    def __post_init__(self):
+        self.G: nx.DiGraph = self.original_graph.copy()  # type: ignore
+
+    # def _
+
+
+@dataclass
+class DisplayGraphTaskGraphviz(DisplayGraphTask[DisplayContextGraphviz]):
+    ...
 
 
 def parallel_plot(G: nx.DiGraph, states: list[StateArraySlice[Node]]) -> list[SVG]:
