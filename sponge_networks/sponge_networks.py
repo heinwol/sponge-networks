@@ -121,9 +121,11 @@ def grid_with_positions(n_cols: int, n_rows: int, grid_type: GridType) -> nx.DiG
 class SpongeNetworkLayout:
     weights_sink_edge: float
     weights_loop: float
+    generate_sinks: bool
 
 
 LayoutT = TypeVar("LayoutT", bound=SpongeNetworkLayout)
+SpongeNetworkT = TypeVar("SpongeNetworkT", bound="SpongeNetwork")
 
 
 @dataclass
@@ -135,12 +137,10 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
     # grid: nx.DiGraph = field(init=False)
 
     @abstractmethod
-    def generate_initial_grid(self) -> nx.DiGraph:
-        ...
+    def generate_initial_grid(self) -> nx.DiGraph: ...
 
     @abstractmethod
-    def upper_nodes(self) -> list[SpongeNode]:
-        ...
+    def upper_nodes(self) -> list[SpongeNode]: ...
 
     @abstractmethod
     def bottom_nodes(self) -> list[SpongeNode]:
@@ -151,8 +151,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
         ...
 
     @abstractmethod
-    def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph:
-        ...
+    def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph: ...
 
     def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
         grid = cast(nx.DiGraph, grid.copy())
@@ -186,6 +185,24 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
     def final_grid_hook(self, grid: nx.DiGraph) -> nx.DiGraph:
         return grid
 
+    def build(self, cls: type[SpongeNetworkT]) -> SpongeNetworkT:
+        grid = self.generate_initial_grid()
+        grid = self.generate_weights_from_layout(grid)
+        grid = self.generate_loops(grid)
+        if self.layout.generate_sinks:
+            grid = self.generate_sinks(grid)
+        grid = self.final_grid_hook(grid)
+
+        resource_network = ResourceNetworkGreedy(grid)
+
+        upper_nodes = self.upper_nodes()
+        bottom_nodes = self.bottom_nodes()
+        return cls(
+            resource_network=resource_network,
+            upper_nodes=upper_nodes,
+            bottom_nodes=bottom_nodes,
+        )
+
 
 class SpongeNetwork:
     def __init__(
@@ -203,26 +220,8 @@ class SpongeNetwork:
         self.bottom_nodes = bottom_nodes
 
     @classmethod
-    def build(
-        cls, builder: AbstractSpongeNetworkBuilder, generate_sinks: bool = True
-    ) -> Self:
-        grid = builder.generate_initial_grid()
-        grid = builder.generate_weights_from_layout(grid)
-        grid = builder.generate_loops(grid)
-        if generate_sinks:
-            grid = builder.generate_sinks(grid)
-        grid = builder.final_grid_hook(grid)
-
-        resource_network = ResourceNetworkGreedy(grid)
-
-        upper_nodes = builder.upper_nodes()
-        bottom_nodes = builder.bottom_nodes()
-
-        return cls(
-            resource_network=resource_network,
-            upper_nodes=upper_nodes,
-            bottom_nodes=bottom_nodes,
-        )
+    def build(cls, builder: AbstractSpongeNetworkBuilder) -> Self:
+        return builder.build(cls)
 
     def initial_state_processor(
         self,
@@ -427,6 +426,7 @@ class _LayoutDict(TypedDict):
     weights_horizontal: float
     weights_up_down: float
     weights_down_up: float
+    generate_sinks: bool
 
 
 def build_sponge_network(
@@ -434,7 +434,6 @@ def build_sponge_network(
     n_cols: int,
     n_rows: int,
     layout: _LayoutDict,
-    generate_sinks: bool = True,
     visual_sink_edge_length: Optional[float] = None,
 ) -> SpongeNetwork:
     visual_sink_edge_length_dict = (
@@ -451,7 +450,6 @@ def build_sponge_network(
                     layout=Layout2d(**layout),
                     **visual_sink_edge_length_dict,
                 ),
-                generate_sinks=generate_sinks,
             )
         case "hexagonal":
             return SpongeNetwork.build(
@@ -461,7 +459,6 @@ def build_sponge_network(
                     layout=LayoutHexagonal(**layout),
                     **visual_sink_edge_length_dict,
                 ),
-                generate_sinks=generate_sinks,
             )
         case "triangular":
             return SpongeNetwork.build(
@@ -471,7 +468,6 @@ def build_sponge_network(
                     layout=LayoutTriangular(**layout),
                     **visual_sink_edge_length_dict,
                 ),
-                generate_sinks=generate_sinks,
             )
         case _:
             raise ValueError(f'unknown grid type: "{grid_type}"')
