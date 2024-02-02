@@ -285,8 +285,17 @@ class ResourceNetwork(Generic[Node]):
 
         return SVG(nx.nx_pydot.to_pydot(G).create_svg())
 
-    def plot_simulation(self, simulation: StateArray[Node], scale: float = 1.0) -> None:
-        pl = self.plot_with_states(simulation, scale=scale)
+    def plot_simulation(
+        self,
+        simulation: StateArray[Node],
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        scale: float = 1.0,
+    ) -> None:
+        pl = self.plot_with_states(
+            simulation,
+            prop_setter=prop_setter,
+            scale=scale,
+        )
         f = lambda i: pl[i]
         interact(
             f,

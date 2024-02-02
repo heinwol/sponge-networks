@@ -277,8 +277,13 @@ class SpongeNetwork:
             self.initial_state_processor(initial_state), n_iters=n_iters
         )
 
-    def plot_simulation(self, sim: StateArray[SpongeNode], scale: float = 1.0) -> None:
-        self.resource_network.plot_simulation(sim, scale)
+    def plot_simulation(
+        self,
+        sim: StateArray[SpongeNode],
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        scale: float = 1.0,
+    ) -> None:
+        self.resource_network.plot_simulation(sim, prop_setter=prop_setter, scale=scale)
 
 
 @dataclass
