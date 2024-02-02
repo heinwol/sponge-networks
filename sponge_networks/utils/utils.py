@@ -54,24 +54,19 @@ def tmap(f: Callable[[T1], T2], x: Iterable[T1]) -> tuple[T2, ...]:
 
 
 class TypedMapping(Protocol[K, V]):
-    def __getitem__(self, key: K, /) -> V:
-        ...
+    def __getitem__(self, key: K, /) -> V: ...
 
-    def __len__(self) -> int:
-        ...
+    def __len__(self) -> int: ...
 
-    def __contains__(self, key: K, /) -> bool:
-        ...
+    def __contains__(self, key: K, /) -> bool: ...
 
 
 @overload
-def get(container: TypedMapping[K, V]) -> Callable[[K], V]:
-    ...
+def get(container: TypedMapping[K, V]) -> Callable[[K], V]: ...
 
 
 @overload
-def get(container: TypedMapping[K, V], key: K) -> V:
-    ...
+def get(container: TypedMapping[K, V], key: K) -> V: ...
 
 
 def get(*args, **kwargs):
@@ -198,12 +193,10 @@ class StateArray(Generic[Node]):
         return len(self.states_arr)
 
     @overload
-    def __getitem__(self, time: int) -> StateArraySlice[Node]:
-        ...
+    def __getitem__(self, time: int) -> StateArraySlice[Node]: ...
 
     @overload
-    def __getitem__(self, time: slice) -> list[StateArraySlice[Node]]:
-        ...
+    def __getitem__(self, time: slice) -> list[StateArraySlice[Node]]: ...
 
     def __getitem__(
         self, time: int | slice
@@ -275,7 +268,7 @@ def preserve_pos_when_plotting(G: nx.DiGraph):
 
 
 def parallel_plot(
-    G: nx.DiGraph, states: StateArray[Node], rng: Sequence[int]
+    G: nx.DiGraph, states: StateArray[Node], rng: Sequence[int], scale: float = 1.0
 ) -> list[SVG]:
     def my_fmt(x: AnyFloat | int) -> str:
         if np.isclose(x, 0):
@@ -293,9 +286,9 @@ def parallel_plot(
 
     total_sum = states.states_arr[-1].sum()
     calc_node_width = (
-        linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
+        linear_func_from_2_points((0, 0.3 * scale), (total_sum, 1.0 * scale))
         if total_sum > 0
-        else const(0.35)
+        else const(0.3 * scale)
     )
     res: list[SVG] = [None] * len(rng)  # type: ignore
     for n_it, idx in enumerate(rng):

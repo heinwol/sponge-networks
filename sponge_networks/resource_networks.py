@@ -213,7 +213,7 @@ class ResourceNetwork(Generic[Node]):
         G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
 
         G.graph["node"] = {  # type: ignore
-            "fontsize": 10,
+            "fontsize": 10 * scale,
             "shape": "circle",
             "style": "filled",
             "fillcolor": "#f0fff4",
@@ -229,7 +229,7 @@ class ResourceNetwork(Generic[Node]):
             calc_edge_width: Callable[[float], float] = lambda x: 2.5
         else:
             calc_edge_width = linear_func_from_2_points(
-                (min_weight, 0.8), (max_weight, 4.5)
+                (min_weight, 0.6 * scale), (max_weight, 4 * scale)
             )
 
         preserve_pos_when_plotting(G)
@@ -254,8 +254,8 @@ class ResourceNetwork(Generic[Node]):
             weight = self._G.edges[u, v]["weight"]
             G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
             G.edges[u, v]["penwidth"] = calc_edge_width(weight)
-            G.edges[u, v]["arrowsize"] = 0.5
-            G.edges[u, v]["fontsize"] = 14
+            G.edges[u, v]["arrowsize"] = 0.4 * scale
+            G.edges[u, v]["fontsize"] = 12 * scale
             G.edges[u, v]["fontcolor"] = "black"
             G.edges[u, v]["color"] = "#f3ad5c99"
 
@@ -269,6 +269,7 @@ class ResourceNetwork(Generic[Node]):
                 const_iter(G),
                 const_iter(states),
                 parallelize_range(n_pools, range(len(res))),
+                const_iter(scale),
             ),
         )
         return flatten(answer)
