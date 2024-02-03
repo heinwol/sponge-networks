@@ -246,7 +246,7 @@ class ResourceNetwork(Generic[Node]):
                 "color": "transparent",
                 "fillcolor": "transparent",
                 "tooltip": str(v),
-                "width": max_node_width,
+                "width": max_node_width * scale,
             }
         G.add_nodes_from(void_node_dict.items())
 
