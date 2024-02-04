@@ -26,6 +26,7 @@ typeguard = "^4.0.0"
 pygraphviz = "^1.11"
 returns = "^0.22.0"
 expression = "^5.0.2"
+svgpathtools = "^1.6.1"
 
 
 [tool.poetry.group.dev.dependencies]

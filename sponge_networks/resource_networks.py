@@ -1,3 +1,4 @@
+import io
 import os
 import multiprocessing
 from typing import cast
@@ -5,9 +6,12 @@ from typing import cast
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
+
 from IPython.lib import pretty
 from IPython.display import display
 from ipywidgets import widgets
+from svgpathtools import svg2paths2
+
 from scipy.sparse.linalg import eigs as sparce_eigs
 
 from .utils.utils import *
@@ -298,7 +302,7 @@ class ResourceNetwork(Generic[Node]):
             scale=scale,
         )
         f = lambda i: display(pl[i])
-        return widgets.interactive(
+        interactive_plot = widgets.interactive(
             f,
             i=widgets.IntSlider(
                 min=0,
@@ -308,6 +312,12 @@ class ResourceNetwork(Generic[Node]):
                 description="№ of iteration",
             ),
         )
+        try:
+            attrs = svg2paths2(io.StringIO(pl[0].data))[2]  # type: ignore
+            height: str = attrs["height"]  # type: ignore
+            interactive_plot.children[-1].layout.height = height  # type: ignore
+        finally:
+            return interactive_plot
 
 
 class ResourceNetworkWithIncome(ResourceNetwork):

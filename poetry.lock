@@ -1186,6 +1186,33 @@ pure-eval = "*"
 tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
 [[package]]
+name = "svgpathtools"
+version = "1.6.1"
+description = "A collection of tools for manipulating and analyzing SVG Path objects and Bezier curves."
+optional = false
+python-versions = "*"
+files = [
+    {file = "svgpathtools-1.6.1-py2.py3-none-any.whl", hash = "sha256:39967f9a817b8a12cc6dd1646fc162d522fca6c3fd5f8c94913c15ee4cb3a906"},
+    {file = "svgpathtools-1.6.1.tar.gz", hash = "sha256:7054e6de1953e295bf565d535d585695453b09f8db4a2f7c4853348732097a3e"},
+]
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
+svgwrite = "*"
+
+[[package]]
+name = "svgwrite"
+version = "1.4.3"
+description = "A Python library to create SVG drawings."
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "svgwrite-1.4.3-py3-none-any.whl", hash = "sha256:bb6b2b5450f1edbfa597d924f9ac2dd099e625562e492021d7dd614f65f8a22d"},
+    {file = "svgwrite-1.4.3.zip", hash = "sha256:a8fbdfd4443302a6619a7f76bc937fc683daf2628d9b737c891ec08b8ce524c3"},
+]
+
+[[package]]
 name = "sympy"
 version = "1.12"
 description = "Computer algebra system (CAS) in Python"
@@ -1307,4 +1334,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "3e512f888ff1060b9f49845bee24bc1ff9c97fd2f4fc5846b6bcf41418ee3147"
+content-hash = "6246e1cc9b28e90c98d396430afa0a2f4b9506092d7c6b82de5b299a34048cea"
