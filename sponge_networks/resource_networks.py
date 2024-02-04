@@ -1,13 +1,13 @@
 import os
 import multiprocessing
 from typing import cast
-from expression import identity
 
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
 from IPython.lib import pretty
-from ipywidgets import interact, widgets
+from IPython.display import display
+from ipywidgets import widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
 
 from .utils.utils import *
@@ -291,14 +291,14 @@ class ResourceNetwork(Generic[Node]):
         simulation: StateArray[Node],
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
         scale: float = 1.0,
-    ) -> None:
+    ) -> widgets.interactive:
         pl = self.plot_with_states(
             simulation,
             prop_setter=prop_setter,
             scale=scale,
         )
-        f = lambda i: pl[i]
-        interact(
+        f = lambda i: display(pl[i])
+        return widgets.interactive(
             f,
             i=widgets.IntSlider(
                 min=0,
