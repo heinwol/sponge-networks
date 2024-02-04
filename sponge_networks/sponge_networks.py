@@ -1,6 +1,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from typing import Literal, final
+import ipywidgets
 
 import networkx as nx
 
@@ -281,8 +282,10 @@ class SpongeNetwork:
         sim: StateArray[SpongeNode],
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
         scale: float = 1.0,
-    ) -> None:
-        self.resource_network.plot_simulation(sim, prop_setter=prop_setter, scale=scale)
+    ) -> ipywidgets.interactive:
+        return self.resource_network.plot_simulation(
+            sim, prop_setter=prop_setter, scale=scale
+        )
 
 
 @dataclass

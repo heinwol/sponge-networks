@@ -1,6 +1,7 @@
 import io
 import os
 import multiprocessing
+import re
 from typing import cast
 
 import networkx as nx
@@ -17,6 +18,12 @@ from scipy.sparse.linalg import eigs as sparce_eigs
 from .utils.utils import *
 
 # from scipy.sparse import sparray
+
+
+def _parse_svg_distance_attribute(attr: str) -> tuple[int, str]:
+    rx = re.compile(r"(\d+)(\w*)")
+    num, metrics = rx.match(attr).groups()  # type: ignore
+    return (int(num), metrics)
 
 
 class ResourceNetwork(Generic[Node]):
@@ -238,9 +245,19 @@ class ResourceNetwork(Generic[Node]):
 
         preserve_pos_when_plotting(G)
 
+        for u, v in G.edges:
+            weight = self._G.edges[u, v]["weight"]
+            G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
+            G.edges[u, v]["penwidth"] = calc_edge_width(weight)
+            G.edges[u, v]["arrowsize"] = 0.4 * scale
+            G.edges[u, v]["fontsize"] = 10 * scale
+            G.edges[u, v]["fontcolor"] = "black"
+            G.edges[u, v]["color"] = "#f3ad5c99"
+
         # adding big "void" transparent nodes to preserve layout when
         # width of a node is changed dynamically
         void_node_dict = {}
+        void_edges = []
         for v in G.nodes:
             G.nodes[v]["tooltip"] = str(v)
             void_node_dict[("void", v)] = {
@@ -252,16 +269,23 @@ class ResourceNetwork(Generic[Node]):
                 "tooltip": str(v),
                 "width": max_node_width * scale,
             }
+            if (v, v) in G.edges:
+                void_edges.append(
+                    (
+                        ("void", v),
+                        ("void", v),
+                        {
+                            "weight": G.edges[v, v]["weight"],
+                            "style": "invis",
+                            "label": "",
+                            "color": "transparent",
+                            "fillcolor": "transparent",
+                            "arrowsize": 10 * scale,
+                        },
+                    )
+                )
         G.add_nodes_from(void_node_dict.items())
-
-        for u, v in G.edges:
-            weight = self._G.edges[u, v]["weight"]
-            G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
-            G.edges[u, v]["penwidth"] = calc_edge_width(weight)
-            G.edges[u, v]["arrowsize"] = 0.4 * scale
-            G.edges[u, v]["fontsize"] = 12 * scale
-            G.edges[u, v]["fontcolor"] = "black"
-            G.edges[u, v]["color"] = "#f3ad5c99"
+        G.add_edges_from(void_edges)
 
         cpu_count = os.cpu_count()
         n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
@@ -313,9 +337,17 @@ class ResourceNetwork(Generic[Node]):
             ),
         )
         try:
-            attrs = svg2paths2(io.StringIO(pl[0].data))[2]  # type: ignore
-            height: str = attrs["height"]  # type: ignore
-            interactive_plot.children[-1].layout.height = height  # type: ignore
+            all_attrs: list[dict[str, str]] = [svg2paths2(io.StringIO(svg.data))[2] for svg in pl]  # type: ignore
+            max_height = max(
+                _parse_svg_distance_attribute(attr["height"])[0] for attr in all_attrs
+            )
+            max_width = max(
+                _parse_svg_distance_attribute(attr["width"])[0] for attr in all_attrs
+            )
+            height_metrics = _parse_svg_distance_attribute(all_attrs[0]["height"])[1]
+            width_metrics = _parse_svg_distance_attribute(all_attrs[0]["width"])[1]
+            interactive_plot.children[-1].layout.height = str(max_height + 2) + height_metrics  # type: ignore
+            # interactive_plot.children[-1].layout.width = str(max_width + 2) + width_metrics  # type: ignore
         finally:
             return interactive_plot
 
