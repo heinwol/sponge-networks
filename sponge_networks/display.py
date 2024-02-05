@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import multiprocessing
 import os
 from typing import Any, Callable, Generic, Optional, Sequence, cast, TypeVar, final
@@ -155,8 +155,10 @@ class DisplayHandler(ABC, Generic[_DisplayResultT]):
 
 @dataclass
 class DisplayContextGraphviz(DisplayContext):
+    G: nx.DiGraph = field(init=False)
+
     def __post_init__(self):
-        self.G: nx.DiGraph = self.original_graph.copy()  # type: ignore
+        self.G = self.original_graph.copy()  # type: ignore
 
     # def _
 
