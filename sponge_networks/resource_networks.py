@@ -237,7 +237,7 @@ class ResourceNetwork(Generic[Node]):
         max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
         min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
         if np.allclose(max_weight, min_weight):
-            calc_edge_width: Callable[[float], float] = lambda x: 2.5
+            calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
         else:
             calc_edge_width = linear_func_from_2_points(
                 (min_weight, 0.6 * scale), (max_weight, 4 * scale)

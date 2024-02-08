@@ -77,103 +77,14 @@ def _ensure_graph_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
     return G
 
 
-@dataclass
-class DisplayContext(ABC):
-    """
-    Unique for each DisplayGraphTask instance. Usually some graph
-    or whatever
-    """
-
-    original_graph: nx.DiGraph
-
-
-DisplayContextT = TypeVar("DisplayContextT", bound=DisplayContext)
-
-
-@dataclass
-class DisplaySimulationContext(ABC, Generic[DisplayContextT]):
-    display_context: DisplayContextT
-
-
-DisplaySimulationContextT = TypeVar(
-    "DisplaySimulationContextT", bound=DisplaySimulationContext
-)
-
-
-@dataclass
-class DisplayGraphTask(ABC, Generic[DisplayContextT]):
-    display_context: DisplayContextT
-
-
-@dataclass
-class DisplaySimulationTask(ABC, Generic[DisplaySimulationContextT]):
-    display_simulation_context: DisplaySimulationContextT
-
-
-# @dataclass
-# class SimulationDisplayer(ABC, Generic[DisplaySimulationContextT]):
-#     display_context: DisplaySimulationContextT
-
-
-# class DisplayUpdaterTask(ABC):
-#     ...
-
-
-# @dataclass
-# class DisplaySimulationUpdater(ABC):
-#     context: DisplayContext
-
-#     @abstractmethod
-#     def update_layout(
-#         self, G: nx.DiGraph, upd: DisplayUpdaterTask
-#     ) -> DisplayUpdaterTask:
-#         ...
-
-#     @abstractmethod
-#     def update_edges(
-#         self, G: nx.DiGraph, upd: DisplayUpdaterTask
-#     ) -> DisplayUpdaterTask:
-#         ...
-
-#     @abstractmethod
-#     def update_verticies(
-#         self, G: nx.DiGraph, upd: DisplayUpdaterTask
-#     ) -> DisplayUpdaterTask:
-#         ...
-
-_DisplayResultT = TypeVar("_DisplayResultT", bound=Any)
-
-
-class DisplayHandler(ABC, Generic[_DisplayResultT]):
-    @abstractmethod
-    def display(self) -> _DisplayResultT:
-        ...
-
-
-### Concrete implementations:
-
-
-@dataclass
-class DisplayContextGraphviz(DisplayContext):
-    G: nx.DiGraph = field(init=False)
-
-    def __post_init__(self):
-        self.G = self.original_graph.copy()  # type: ignore
-
-    # def _
-
-
-@dataclass
-class DisplayGraphTaskGraphviz(DisplayGraphTask[DisplayContextGraphviz]):
-    ...
-
-
-def parallel_plot(G: nx.DiGraph, states: list[StateArraySlice[Node]]) -> list[SVG]:
+def parallel_plot(
+    G: nx.DiGraph, states: list[StateArraySlice[Node]], scale: float = 1.0
+) -> list[SVG]:
     total_sum: float = states[0]["states"].arr.sum()
     calc_node_width = (
-        linear_func_from_2_points((0, 0.35), (total_sum, 1.1))
+        linear_func_from_2_points((0, 0.3 * scale), (total_sum, 1.0 * scale))
         if total_sum > 0
-        else const(0.35)
+        else const(0.3 * scale)
     )
     res: list[SVG] = [None] * len(states)  # type: ignore
     for n_it, state in enumerate(states):
@@ -200,92 +111,103 @@ def parallel_plot(G: nx.DiGraph, states: list[StateArraySlice[Node]]) -> list[SV
     return cast(list[SVG], res)
 
 
-class DisplayableGraph:
-    def __init__(self, G: nx.DiGraph) -> None:
-        self.G = G
+def plot_with_states(
+    G: nx.DiGraph,
+    states: StateArray[Node],
+    prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+    scale: float = 1.0,
+    max_node_width: float = 1.1,
+) -> list[SVG]:
 
-    def layout(self):
-        pass
+    G.graph["graph"] = {"scale": scale}  # type: ignore
 
-    def plot_with_states(
-        self,
-        states: StateArray[Node],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-        scale: float = 1.0,
-        max_node_width: float = 1.1,
-    ) -> list[SVG]:
-        G: nx.DiGraph = self.G
+    G.graph["node"] = {  # type: ignore
+        "fontsize": 10 * scale,
+        "shape": "circle",
+        "style": "filled",
+        "fillcolor": "#f0fff4",
+        "fixedsize": True,
+    }
 
-        G.graph["graph"] = {"scale": scale}  # type: ignore
+    if prop_setter is not None:
+        prop_setter(G)
 
-        G.graph["node"] = {  # type: ignore
-            "fontsize": 10,
-            "shape": "circle",
-            "style": "filled",
-            "fillcolor": "#f0fff4",
-            "fixedsize": True,
-        }
-
-        if prop_setter is not None:
-            prop_setter(G)
-
-        max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        if np.allclose(max_weight, min_weight):
-            calc_edge_width: Callable[[float], float] = lambda x: 2.5
-        else:
-            calc_edge_width = linear_func_from_2_points(
-                (min_weight, 0.8), (max_weight, 4.5)
-            )
-
-        G = _ensure_graph_layout(G)
-
-        # adding big "void" transparent nodes to preserve layout when
-        # width of a node is changed dynamically
-        void_node_dict = {}
-        for v in G.nodes:
-            G.nodes[v]["tooltip"] = str(v)
-            void_node_dict[("void", v)] = {
-                "pos": G.nodes[v]["pos"],
-                "style": "invis",
-                "label": "",
-                "color": "transparent",
-                "fillcolor": "transparent",
-                "tooltip": str(v),
-                "width": max_node_width,
-            }
-        G.add_nodes_from(void_node_dict.items())
-
-        for u, v in G.edges:
-            weight = self.G.edges[u, v]["weight"]
-            G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
-            G.edges[u, v]["penwidth"] = calc_edge_width(weight)
-            G.edges[u, v]["arrowsize"] = 0.5
-            G.edges[u, v]["fontsize"] = 14
-            G.edges[u, v]["fontcolor"] = "black"
-            G.edges[u, v]["color"] = "#f3ad5c99"
-
-        cpu_count = os.cpu_count()
-        n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
-        pool_obj = multiprocessing.Pool(n_pools)
-        svgs: list[list[SVG]] = pool_obj.starmap(
-            parallel_plot,
-            zip(
-                const_iter(G),
-                const_iter(states),
-                parallelize_range(n_pools, range(len(states))),
-            ),
+    max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
+    min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
+    if np.allclose(max_weight, min_weight):
+        calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
+    else:
+        calc_edge_width = linear_func_from_2_points(
+            (min_weight, 0.6 + scale), (max_weight, 4 * scale)
         )
-        return flatten(svgs)
 
-    def plot(self, scale: float = 1.7) -> SVG:
-        G = self.G
+    G = _ensure_graph_layout(G)
 
-        G.graph["graph"] = {"scale": scale}  # type: ignore
+    for u, v in G.edges:
+        weight = self._G.edges[u, v]["weight"]
+        G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
+        G.edges[u, v]["penwidth"] = calc_edge_width(weight)
+        G.edges[u, v]["arrowsize"] = 0.4 * scale
+        G.edges[u, v]["fontsize"] = 10 * scale
+        G.edges[u, v]["fontcolor"] = "black"
+        G.edges[u, v]["color"] = "#f3ad5c99"
 
-        G = _ensure_graph_layout(G)
+    # adding big "void" transparent nodes to preserve layout when
+    # width of a node is changed dynamically
+    void_node_dict = {}
+    void_edges = []
+    for v in G.nodes:
+        G.nodes[v]["tooltip"] = str(v)
+        void_node_dict[("void", v)] = {
+            "pos": G.nodes[v]["pos"],
+            "style": "invis",
+            "label": "",
+            "color": "transparent",
+            "fillcolor": "transparent",
+            "tooltip": str(v),
+            "width": max_node_width * scale,
+        }
+        if (v, v) in G.edges:
+            void_edges.append(
+                (
+                    ("void", v),
+                    ("void", v),
+                    {
+                        "weight": G.edges[v, v]["weight"],
+                        "style": "invis",
+                        "label": "",
+                        "color": "transparent",
+                        "fillcolor": "transparent",
+                        "arrowsize": 10 * scale,
+                    },
+                )
+            )
+    G.add_nodes_from(void_node_dict.items())
+    G.add_edges_from(void_edges)
 
-        for u, v in G.edges:
-            G.edges[u, v]["label"] = G.edges[u, v]["weight"]
+    cpu_count = os.cpu_count()
+    n_pools = min(cpu_count or 1, len(states.states_arr))
+    pool_obj = multiprocessing.Pool(n_pools)
+    svgs: list[list[SVG]] = pool_obj.starmap(
+        parallel_plot,
+        zip(
+            const_iter(G),
+            const_iter(states),
+            parallelize_range(n_pools, range(len(states))),
+            const_iter(scale),
+        ),
+    )
+    return flatten(svgs)
 
-        return SVG(nx.nx_pydot.to_pydot(G).create_svg())
+
+def plot(G: nx.DiGraph, scale: float = 1.7) -> SVG:
+    G = self.G
+
+    G.graph["graph"] = {"scale": scale}  # type: ignore
+
+    G = _ensure_graph_layout(G)
+
+    for u, v in G.edges:
+        G.edges[u, v]["label"] = G.edges[u, v]["weight"]
+
+    return SVG(nx.nx_pydot.to_pydot(G).create_svg())
