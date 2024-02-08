@@ -37,13 +37,17 @@ rec {
             preferWheels = true; # I don't want to compile all that
           };
 
-          devEnv = poetry2nixLib.mkPoetryEnv poetryAttrs;
+          devEnv = poetry2nixLib.mkPoetryEnv (poetryAttrs // {
+            groups = [ "dev" "test" ];
+          });
 
           devEnvPopulated =
             (devEnv.env.overrideAttrs (oldAttrs: rec {
               name = "py";
               buildInputs = with pkgs;
-                buildInputs-base ++ [
+                (oldAttrs.buildInputs or [ ])
+                ++ buildInputs-base
+                ++ [
 
                 ];
               shellHook = ''
