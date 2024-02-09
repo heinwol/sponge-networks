@@ -86,7 +86,7 @@ SpongeNode: TypeAlias = tuple[int, int]
 
 
 def _grid_2d_assign_positions(G: nx.Graph, n_cols: int, n_rows: int) -> nx.Graph:
-    G = G.copy()
+    G = copy_graph(G)
     for node in G.nodes:
         x, y = node
         G.nodes[node]["pos"] = (x, y)
@@ -155,7 +155,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
     def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph: ...
 
     def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
-        grid = cast(nx.DiGraph, grid.copy())
+        grid = copy_graph(grid)
 
         def gen_pos(node: SpongeNode) -> tuple[float, float]:
             node_d = grid.nodes[node]
@@ -177,7 +177,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
         return grid
 
     def generate_loops(self, grid: nx.DiGraph) -> nx.DiGraph:
-        grid = cast(nx.DiGraph, grid.copy())
+        grid = copy_graph(grid)
         grid.add_edges_from(
             (node, node, {"weight": self.layout.weights_loop}) for node in grid.nodes
         )
@@ -312,7 +312,7 @@ class SpongeNetwork2dBuilder(AbstractSpongeNetworkBuilder[Layout2d]):
 
     @override
     def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph:
-        grid = cast(nx.DiGraph, grid.copy())
+        grid = copy_graph(grid)
         u: tuple[int, int]
         v: tuple[int, int]
         d: dict
@@ -357,7 +357,7 @@ class SpongeNetworkTriangularBuilder(AbstractSpongeNetworkBuilder[LayoutTriangul
 
     @override
     def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph:
-        grid = cast(nx.DiGraph, grid.copy())
+        grid = copy_graph(grid)
         u: tuple[int, int]
         v: tuple[int, int]
         d: dict
@@ -404,7 +404,7 @@ class SpongeNetworkHexagonalBuilder(AbstractSpongeNetworkBuilder[LayoutHexagonal
 
     @override
     def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph:
-        grid = cast(nx.DiGraph, grid.copy())
+        grid = copy_graph(grid)
         u: tuple[int, int]
         v: tuple[int, int]
         d: dict

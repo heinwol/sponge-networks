@@ -30,7 +30,7 @@ class ResourceNetwork(Generic[Node]):
     def __init__(self, G: Optional[nx.DiGraph] = None):
         if G is None:
             G = nx.DiGraph()
-        self._G: nx.DiGraph = G.copy()  # type: ignore
+        self._G = copy_graph(G)
         dp: tuple[dict[Node, int], list[Node]] = ResourceNetwork._descriptor_pair(
             self._G.nodes
         )
@@ -87,7 +87,7 @@ class ResourceNetwork(Generic[Node]):
         all operations on the result will have no effect on
         the ResourceNetwork instance
         """
-        return self._G.copy()  # type: ignore
+        return copy_graph(self._G)
 
     def r_in(self) -> NDArrayT[AnyFloat]:
         return self.adjacency_matrix.sum(axis=0)

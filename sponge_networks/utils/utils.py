@@ -111,6 +111,13 @@ def flatten(x: Sequence[Sequence[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(x))
 
 
+_GraphT = TypeVar("_GraphT", bound=nx.Graph)
+
+
+def copy_graph(G: _GraphT, as_view: bool = False) -> _GraphT:
+    return cast(_GraphT, G.copy(as_view=as_view))
+
+
 class DescriptorPair(TypedDict, Generic[Node]):
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
