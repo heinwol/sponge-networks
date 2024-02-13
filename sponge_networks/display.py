@@ -2,12 +2,25 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import multiprocessing
 import os
-from typing import Any, Callable, Generic, Optional, Sequence, cast, TypeVar, final
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Literal,
+    Optional,
+    Protocol,
+    Self,
+    Sequence,
+    TypeAlias,
+    TypeVarTuple,
+    Union,
+    cast,
+    TypeVar,
+    final,
+)
 import networkx as nx
 import numpy as np
 from toolz import valmap
-
-from returns.curry import curry
 
 from IPython.core.display import SVG
 from ipywidgets import interact, widgets
@@ -24,10 +37,23 @@ from sponge_networks.utils.utils import (
     StateArraySlice,
     const,
     const_iter,
+    copy_graph,
     flatten,
     linear_func_from_2_points,
     parallelize_range,
 )
+
+# _GraphProps = TypeVar("_GraphProps", bound=Any, contravariant=True)
+
+# _GraphProps = TypeVarTuple("_GraphProps")
+# _G_Weight: TypeAlias = Literal["weight"]
+# _G_Pos: TypeAlias = Literal["pos"]
+
+
+# class DiGraphWithProps(nx.DiGraph, Generic[*_GraphProps]): ...
+
+
+# x = DiGraphWithProps[_G_Pos]
 
 
 def _format_vertex_resource_for_simulation_display(x: AnyFloat | int) -> str:
@@ -53,7 +79,7 @@ def _gen_graph_pydot_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
     return G
 
 
-def _ensure_graph_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
+def _ensure_graph_layout(G: nx.DiGraph) -> nx.DiGraph:
     if all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
         for node in G.nodes:
             node_d: dict = G.nodes[node]
@@ -77,9 +103,115 @@ def _ensure_graph_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
     return G
 
 
+def _add_void_nodes(G: nx.DiGraph, node_width: float, scale: float) -> None:
+    """
+    adding big "void" transparent nodes to preserve layout when
+    width of a node is changed dynamically
+    """
+    void_node_dict = {}
+    void_edges = []
+    for v in G.nodes:
+        G.nodes[v]["tooltip"] = str(v)
+        void_node_dict[("void", v)] = {
+            "pos": G.nodes[v]["pos"],
+            "style": "invis",
+            "label": "",
+            "color": "transparent",
+            "fillcolor": "transparent",
+            "tooltip": str(v),
+            "width": node_width * scale,
+        }
+        if (v, v) in G.edges:
+            e: dict = G.edges[v, v]
+            void_edges.append(
+                (
+                    ("void", v),
+                    ("void", v),
+                    {
+                        "weight": e["weight"] if "weight" in e else 1,
+                        "style": "invis",
+                        "label": "",
+                        "color": "transparent",
+                        "fillcolor": "transparent",
+                        "arrowsize": 10 * scale,
+                    },
+                )
+            )
+    G.add_nodes_from(void_node_dict.items())
+    G.add_edges_from(void_edges)
+
+
+@dataclass
+class DrawableGraphWithContext(Generic[T]):
+    """
+    Here `original_graph` is the graph we want to be displayed,
+    it should not be modified in any way (copy if needed)
+
+    `drawing_graph`, on the contrary, is the graph we're modifying
+    to pass to some display handler. In current architecture it's
+    supposed to be unique, though it's not always true. Anyway,
+    copy this graph if needed, since it's obviously not e.g. thread
+    safe
+    """
+
+    original_graph: nx.DiGraph
+    display_context: T
+    drawing_graph: nx.DiGraph
+
+
+@dataclass
+class JustDrawable(DrawableGraphWithContext[None]):
+    @classmethod
+    def new(cls, G: nx.DiGraph) -> Self:
+        return cls(G, None, copy_graph(G))
+
+
+@dataclass
+class SimulationContext:
+    scale: float = 1.0
+    max_node_width: float = 1.1
+
+
+@dataclass
+class SimulationDrawable(DrawableGraphWithContext[SimulationContext]):
+    @classmethod
+    def new(
+        cls,
+        G: nx.DiGraph,
+        scale: Optional[float] = None,
+        max_node_width: Optional[float] = None,
+    ) -> Self:
+        return cls(
+            G,
+            SimulationContext(
+                scale=(scale or SimulationContext.scale),
+                max_node_width=(max_node_width or SimulationContext.max_node_width),
+            ),
+            copy_graph(G),
+        )
+
+
+def plot(G: nx.DiGraph, scale: float = 1.7) -> SVG:
+    drawable = JustDrawable.new(G)
+    G_d = drawable.drawing_graph
+
+    G_d.graph["graph"] = {"scale": scale}  # type: ignore
+
+    G_d = _ensure_graph_layout(G_d)
+
+    for u, v in G_d.edges:
+        G_d.edges[u, v]["label"] = G_d.edges[u, v]["weight"]
+
+    return SVG(nx.nx_pydot.to_pydot(G_d).create_svg())
+
+
 def parallel_plot(
-    G: nx.DiGraph, states: list[StateArraySlice[Node]], scale: float = 1.0
+    drawable: SimulationDrawable,
+    states: list[StateArraySlice[Node]],
 ) -> list[SVG]:
+    G = drawable.drawing_graph
+    scale = drawable.display_context.scale
+
     total_sum: float = states[0]["states"].arr.sum()
     calc_node_width = (
         linear_func_from_2_points((0, 0.3 * scale), (total_sum, 1.0 * scale))
@@ -112,12 +244,13 @@ def parallel_plot(
 
 
 def plot_with_states(
-    G: nx.DiGraph,
+    drawable: SimulationDrawable,
     states: StateArray[Node],
     prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-    scale: float = 1.0,
-    max_node_width: float = 1.1,
 ) -> list[SVG]:
+    G = drawable.drawing_graph
+    scale = drawable.display_context.scale
+    max_node_width = drawable.display_context.max_node_width
 
     G.graph["graph"] = {"scale": scale}  # type: ignore
 
@@ -144,7 +277,7 @@ def plot_with_states(
     G = _ensure_graph_layout(G)
 
     for u, v in G.edges:
-        weight = self._G.edges[u, v]["weight"]
+        weight = drawable.original_graph.edges[u, v]["weight"]
         G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
         G.edges[u, v]["penwidth"] = calc_edge_width(weight)
         G.edges[u, v]["arrowsize"] = 0.4 * scale
@@ -152,38 +285,7 @@ def plot_with_states(
         G.edges[u, v]["fontcolor"] = "black"
         G.edges[u, v]["color"] = "#f3ad5c99"
 
-    # adding big "void" transparent nodes to preserve layout when
-    # width of a node is changed dynamically
-    void_node_dict = {}
-    void_edges = []
-    for v in G.nodes:
-        G.nodes[v]["tooltip"] = str(v)
-        void_node_dict[("void", v)] = {
-            "pos": G.nodes[v]["pos"],
-            "style": "invis",
-            "label": "",
-            "color": "transparent",
-            "fillcolor": "transparent",
-            "tooltip": str(v),
-            "width": max_node_width * scale,
-        }
-        if (v, v) in G.edges:
-            void_edges.append(
-                (
-                    ("void", v),
-                    ("void", v),
-                    {
-                        "weight": G.edges[v, v]["weight"],
-                        "style": "invis",
-                        "label": "",
-                        "color": "transparent",
-                        "fillcolor": "transparent",
-                        "arrowsize": 10 * scale,
-                    },
-                )
-            )
-    G.add_nodes_from(void_node_dict.items())
-    G.add_edges_from(void_edges)
+    _add_void_nodes(G, max_node_width, scale)
 
     cpu_count = os.cpu_count()
     n_pools = min(cpu_count or 1, len(states.states_arr))
@@ -198,16 +300,3 @@ def plot_with_states(
         ),
     )
     return flatten(svgs)
-
-
-def plot(G: nx.DiGraph, scale: float = 1.7) -> SVG:
-    G = self.G
-
-    G.graph["graph"] = {"scale": scale}  # type: ignore
-
-    G = _ensure_graph_layout(G)
-
-    for u, v in G.edges:
-        G.edges[u, v]["label"] = G.edges[u, v]["weight"]
-
-    return SVG(nx.nx_pydot.to_pydot(G).create_svg())
