@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import multiprocessing
 import os
+import io
+import re
 from typing import (
     Any,
     Callable,
@@ -23,7 +25,10 @@ import numpy as np
 from toolz import valmap
 
 from IPython.core.display import SVG
-from ipywidgets import interact, widgets
+from IPython.display import display
+from ipywidgets import widgets
+
+from svgpathtools import svg2paths2
 
 from sponge_networks.utils.utils import (
     T,
@@ -54,6 +59,12 @@ from sponge_networks.utils.utils import (
 
 
 # x = DiGraphWithProps[_G_Pos]
+
+
+def _parse_svg_distance_attribute(attr: str) -> tuple[int, str]:
+    rx = re.compile(r"(\d+)(\w*)")
+    num, metrics = rx.match(attr).groups()  # type: ignore
+    return (int(num), metrics)
 
 
 def _format_vertex_resource_for_simulation_display(x: AnyFloat | int) -> str:
@@ -191,7 +202,7 @@ class SimulationDrawable(DrawableGraphWithContext[SimulationContext]):
         )
 
 
-def plot(G: nx.DiGraph, scale: float = 1.7) -> SVG:
+def plot(G: nx.DiGraph, scale: float) -> SVG:
     drawable = JustDrawable.new(G)
     G_d = drawable.drawing_graph
 
@@ -300,3 +311,36 @@ def plot_with_states(
         ),
     )
     return flatten(svgs)
+
+
+def display_svgs_interactively(
+    svgs: list[SVG],
+) -> widgets.interactive:
+
+    f = lambda i: display(svgs[i])
+    interactive_plot = widgets.interactive(
+        f,
+        i=widgets.IntSlider(
+            min=0,
+            max=len(svgs) - 1,
+            step=1,
+            value=0,
+            description="№ of iteration",
+        ),
+    )
+    try:
+        all_attrs: list[dict[str, str]] = [
+            svg2paths2(io.StringIO(svg.data))[2] for svg in svgs  # type: ignore
+        ]
+        max_height = max(
+            _parse_svg_distance_attribute(attr["height"])[0] for attr in all_attrs
+        )
+        max_width = max(
+            _parse_svg_distance_attribute(attr["width"])[0] for attr in all_attrs
+        )
+        height_metrics = _parse_svg_distance_attribute(all_attrs[0]["height"])[1]
+        width_metrics = _parse_svg_distance_attribute(all_attrs[0]["width"])[1]
+        interactive_plot.children[-1].layout.height = str(max_height + 2) + height_metrics  # type: ignore
+        # interactive_plot.children[-1].layout.width = str(max_width + 2) + width_metrics  # type: ignore
+    finally:
+        return interactive_plot

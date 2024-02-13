@@ -1,7 +1,3 @@
-import io
-import os
-import multiprocessing
-import re
 from typing import cast
 
 import networkx as nx
@@ -9,21 +5,20 @@ import numpy as np
 import numpy.typing as npt
 
 from IPython.lib import pretty
-from IPython.display import display
 from ipywidgets import widgets
-from svgpathtools import svg2paths2
 
 from scipy.sparse.linalg import eigs as sparce_eigs
+
+from sponge_networks.display import (
+    SimulationDrawable,
+    display_svgs_interactively,
+    plot,
+    plot_with_states,
+)
 
 from .utils.utils import *
 
 # from scipy.sparse import sparray
-
-
-def _parse_svg_distance_attribute(attr: str) -> tuple[int, str]:
-    rx = re.compile(r"(\d+)(\w*)")
-    num, metrics = rx.match(attr).groups()  # type: ignore
-    return (int(num), metrics)
 
 
 class ResourceNetwork(Generic[Node]):
@@ -215,141 +210,30 @@ class ResourceNetwork(Generic[Node]):
         self,
         states: StateArray[Node],
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-        scale: float = 1.0,
-        max_node_width: float = 1.1,
+        scale: Optional[float] = None,
+        max_node_width: Optional[float] = None,
     ) -> list[SVG]:
-        G: nx.DiGraph = self.G
-        res = [None] * len(states)
-
-        G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
-
-        G.graph["node"] = {  # type: ignore
-            "fontsize": 10 * scale,
-            "shape": "circle",
-            "style": "filled",
-            "fillcolor": "#f0fff4",
-            "fixedsize": True,
-        }
-
-        if prop_setter is not None:
-            prop_setter(G)
-
-        max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        if np.allclose(max_weight, min_weight):
-            calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
-        else:
-            calc_edge_width = linear_func_from_2_points(
-                (min_weight, 0.6 * scale), (max_weight, 4 * scale)
-            )
-
-        preserve_pos_when_plotting(G)
-
-        for u, v in G.edges:
-            weight = self._G.edges[u, v]["weight"]
-            G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
-            G.edges[u, v]["penwidth"] = calc_edge_width(weight)
-            G.edges[u, v]["arrowsize"] = 0.4 * scale
-            G.edges[u, v]["fontsize"] = 10 * scale
-            G.edges[u, v]["fontcolor"] = "black"
-            G.edges[u, v]["color"] = "#f3ad5c99"
-
-        # adding big "void" transparent nodes to preserve layout when
-        # width of a node is changed dynamically
-        void_node_dict = {}
-        void_edges = []
-        for v in G.nodes:
-            G.nodes[v]["tooltip"] = str(v)
-            void_node_dict[("void", v)] = {
-                "pos": G.nodes[v]["pos"],
-                "style": "invis",
-                "label": "",
-                "color": "transparent",
-                "fillcolor": "transparent",
-                "tooltip": str(v),
-                "width": max_node_width * scale,
-            }
-            if (v, v) in G.edges:
-                void_edges.append(
-                    (
-                        ("void", v),
-                        ("void", v),
-                        {
-                            "weight": G.edges[v, v]["weight"],
-                            "style": "invis",
-                            "label": "",
-                            "color": "transparent",
-                            "fillcolor": "transparent",
-                            "arrowsize": 10 * scale,
-                        },
-                    )
-                )
-        G.add_nodes_from(void_node_dict.items())
-        G.add_edges_from(void_edges)
-
-        cpu_count = os.cpu_count()
-        n_pools = min(cpu_count if cpu_count else 1, len(states.states_arr))
-        pool_obj = multiprocessing.Pool(n_pools)
-        answer: list[list[SVG]] = pool_obj.starmap(
-            parallel_plot,
-            # identity,  # type: ignore
-            zip(
-                const_iter(G),
-                const_iter(states),
-                parallelize_range(n_pools, range(len(res))),
-                const_iter(scale),
-            ),
+        return plot_with_states(
+            SimulationDrawable.new(self._G, scale=scale, max_node_width=max_node_width),
+            states=states,
+            prop_setter=prop_setter,
         )
-        return flatten(answer)
 
     def plot(self, scale: float = 1.7) -> SVG:
-        G = self.G
-
-        G.graph["graph"] = {"layout": "neato", "scale": scale}  # type: ignore
-
-        preserve_pos_when_plotting(G)
-
-        for u, v in G.edges:
-            G.edges[u, v]["label"] = G.edges[u, v]["weight"]
-
-        return SVG(nx.nx_pydot.to_pydot(G).create_svg())
+        return plot(self.G, scale=scale)
 
     def plot_simulation(
         self,
         simulation: StateArray[Node],
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-        scale: float = 1.0,
+        scale: Optional[float] = None,
     ) -> widgets.interactive:
         pl = self.plot_with_states(
             simulation,
             prop_setter=prop_setter,
             scale=scale,
         )
-        f = lambda i: display(pl[i])
-        interactive_plot = widgets.interactive(
-            f,
-            i=widgets.IntSlider(
-                min=0,
-                max=len(simulation) - 1,
-                step=1,
-                value=0,
-                description="№ of iteration",
-            ),
-        )
-        try:
-            all_attrs: list[dict[str, str]] = [svg2paths2(io.StringIO(svg.data))[2] for svg in pl]  # type: ignore
-            max_height = max(
-                _parse_svg_distance_attribute(attr["height"])[0] for attr in all_attrs
-            )
-            max_width = max(
-                _parse_svg_distance_attribute(attr["width"])[0] for attr in all_attrs
-            )
-            height_metrics = _parse_svg_distance_attribute(all_attrs[0]["height"])[1]
-            width_metrics = _parse_svg_distance_attribute(all_attrs[0]["width"])[1]
-            interactive_plot.children[-1].layout.height = str(max_height + 2) + height_metrics  # type: ignore
-            # interactive_plot.children[-1].layout.width = str(max_width + 2) + width_metrics  # type: ignore
-        finally:
-            return interactive_plot
+        return display_svgs_interactively(pl)
 
 
 class ResourceNetworkWithIncome(ResourceNetwork):
