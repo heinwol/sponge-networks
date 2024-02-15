@@ -46,6 +46,7 @@ from sponge_networks.utils.utils import (
     flatten,
     linear_func_from_2_points,
     parallelize_range,
+    set_object_property_nested,
 )
 
 # _GraphProps = TypeVar("_GraphProps", bound=Any, contravariant=True)
@@ -91,24 +92,24 @@ def _gen_graph_pydot_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
 
 
 def _ensure_graph_layout(G: nx.DiGraph) -> nx.DiGraph:
+    set_object_property_nested(G.graph, {"graph": {"layout": "neato"}}, priority="left")
+    # if not ("graph" in G.graph and "layout" in G.graph["graph"]):
+    #     G.graph["graph"]["layout"] = "neato"  # some magic happens here
     if all(map(lambda node: "pos" in G.nodes[node], G.nodes)):
         for node in G.nodes:
             node_d: dict = G.nodes[node]
-            match node_d["pos"]:
-                case Sequence():
-                    node_d["pos"] = f"{node_d['pos'][0]},{node_d['pos'][1]}!"
-                case str():
-                    pass
-                case _:
-                    raise ValueError(
-                        f"""
+            if isinstance(node_d["pos"], Sequence):
+                node_d["pos"] = f"{node_d['pos'][0]},{node_d['pos'][1]}!"
+            elif isinstance(node_d["pos"], str):
+                pass
+            else:
+                raise ValueError(
+                    f"""
                         Attribute "pos" of every node should be either Sequence or str,
                         however on node '{node}' attribute "pos" is of type '{type(node_d["pos"])}'
                         with value '{node_d["pos"]}'
                         """
-                    )
-            # if isinstance(node_d["pos"], Sequence):
-            # elif not isinstance(node_d["pos"], str):
+                )
     else:
         G = _gen_graph_pydot_layout(G)
     return G
@@ -206,7 +207,8 @@ def plot(G: nx.DiGraph, scale: float) -> SVG:
     drawable = JustDrawable.new(G)
     G_d = drawable.drawing_graph
 
-    G_d.graph["graph"] = {"scale": scale}  # type: ignore
+    set_object_property_nested(G_d.graph, {"graph": {"scale": scale}}, priority="right")
+    # G_d.graph["graph"]["scale"] = scale  # type: ignore
 
     G_d = _ensure_graph_layout(G_d)
 
@@ -263,7 +265,8 @@ def plot_with_states(
     scale = drawable.display_context.scale
     max_node_width = drawable.display_context.max_node_width
 
-    G.graph["graph"] = {"scale": scale}  # type: ignore
+    set_object_property_nested(G.graph, {"graph": {"scale": scale}}, priority="right")
+    # G.graph["graph"] = {"scale": scale}  # type: ignore
 
     G.graph["node"] = {  # type: ignore
         "fontsize": 10 * scale,

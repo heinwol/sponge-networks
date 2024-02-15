@@ -10,6 +10,7 @@ from typing import (
     Hashable,
     Iterable,
     Iterator,
+    Literal,
     Optional,
     Protocol,
     Self,
@@ -109,6 +110,26 @@ def const(x: T) -> Callable[..., T]:
 
 def flatten(x: Sequence[Sequence[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(x))
+
+
+def set_object_property_nested(
+    left: dict,
+    right: dict[Hashable, Any | dict],
+    priority: Literal["left", "right", "error"],
+) -> None:
+    for k, v in right.items():
+        if k not in left:
+            left[k] = v
+        elif isinstance(left[k], dict) and isinstance(v, dict):
+            set_object_property_nested(left[k], v, priority=priority)
+        elif left[k] != v:
+            match priority:
+                case "error":
+                    raise ValueError(f"Cannot merge attributes '{left[k]}' and '{v}'")
+                case "left":
+                    pass
+                case "right":
+                    left[k] = v
 
 
 _GraphT = TypeVar("_GraphT", bound=nx.Graph)
