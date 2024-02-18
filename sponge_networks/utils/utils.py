@@ -39,6 +39,8 @@ T2 = TypeVar("T2", bound=Any)
 ValT = TypeVar("ValT", bound=Any)
 K = TypeVar("K", bound=Any, contravariant=True)
 V = TypeVar("V", bound=Any, covariant=True)
+V1 = TypeVar("V1", bound=Any, covariant=True)
+V2 = TypeVar("V2", bound=Any, covariant=True)
 # NDarrayT = np.ndarray[Any, np.dtype[T]]
 NDArrayT: TypeAlias = npt.NDArray[T]
 Mutated = Annotated[T, "this variable is subject to change"]
@@ -108,7 +110,7 @@ def const(x: T) -> Callable[..., T]:
     return inner
 
 
-def flatten(x: Sequence[Sequence[T]]) -> list[T]:
+def flatten(x: Iterable[Iterable[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(x))
 
 
@@ -130,6 +132,11 @@ def set_object_property_nested(
                     pass
                 case "right":
                     left[k] = v
+
+
+def merge_dicts_policy(
+    ds: Iterable[dict[K, V1]], policy: Callable[[tuple[V1, ...]], V2]
+) -> dict[K, V2]: ...
 
 
 _GraphT = TypeVar("_GraphT", bound=nx.Graph)
