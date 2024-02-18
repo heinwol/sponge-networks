@@ -304,14 +304,13 @@ def plot_with_states(
     cpu_count = os.cpu_count()
     n_pools = min(cpu_count or 1, len(states.states_arr))
     pool_obj = multiprocessing.Pool(n_pools)
+    rngs = parallelize_range(n_pools, range(len(states)))
+    states_packs: list[list[StateArraySlice[Node]]] = [
+        [states[i] for i in pack] for pack in rngs
+    ]
     svgs: list[list[SVG]] = pool_obj.starmap(
         parallel_plot,
-        zip(
-            const_iter(G),
-            const_iter(states),
-            parallelize_range(n_pools, range(len(states))),
-            const_iter(scale),
-        ),
+        zip(const_iter(drawable), states_packs),
     )
     return flatten(svgs)
 
