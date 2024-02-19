@@ -32,10 +32,15 @@ import toolz
 from sponge_networks.resource_networks import ResourceNetwork
 
 from sponge_networks.utils.utils import (
+    K,
     T,
     T1,
     T2,
+    V1,
+    V2,
     AnyFloat,
+    DictMergePolicy,
+    Empty,
     Mutated,
     NDArrayT,
     Node,
@@ -46,7 +51,7 @@ from sponge_networks.utils.utils import (
     copy_graph,
     flatten,
     linear_func_from_2_points,
-    merge_dicts_policy,
+    merge_dicts_with_policy,
     parallelize_range,
     set_object_property_nested,
 )
@@ -83,14 +88,16 @@ class QuotientNetwork(Generic[Node]):
             if node not in quotient_entry:
                 quotient_entry[node] = node
 
-        def nodes_merge_policy(xs: tuple[T, ...]) -> T:
+        def nodes_merge_policy(key: Any, xs: list[T]) -> T | Empty:
+            if key == "pos":
+                return Empty()
             if not all(map(lambda x, y: x == y, xs[:-1], xs[1:])):
                 raise ValueError(f"cannot merge parameters '{xs=}'")
-            return copy(xs[0])
+            return xs[0]
 
         nodes_to_add: dict[QuotientNode[Node], Any] = {}
         for nodeset in quotient_vertices:
-            nodes_to_add[frozenset(nodeset)] = merge_dicts_policy(
+            nodes_to_add[frozenset(nodeset)] = merge_dicts_with_policy(
                 (G.nodes[node] for node in nodeset),
                 nodes_merge_policy,
             )

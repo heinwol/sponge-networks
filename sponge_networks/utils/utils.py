@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+import copy
 from dataclasses import dataclass, field
 import itertools
 from operator import getitem
@@ -114,6 +116,12 @@ def flatten(x: Iterable[Iterable[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(x))
 
 
+class NeverError(BaseException):
+    """
+    You should never encounter this
+    """
+
+
 def set_object_property_nested(
     left: dict,
     right: dict[Hashable, Any | dict],
@@ -134,9 +142,37 @@ def set_object_property_nested(
                     left[k] = v
 
 
-def merge_dicts_policy(
-    ds: Iterable[dict[K, V1]], policy: Callable[[tuple[V1, ...]], V2]
-) -> dict[K, V2]: ...
+class Empty: ...
+
+
+DictMergePolicy: TypeAlias = Callable[[K, list[V1]], V2 | Empty]
+
+
+def merge_dicts_with_policy(
+    ds: Iterable[dict[K, V1]], policy: DictMergePolicy[K, V1, V2]
+) -> dict[K, V2]:
+    res = {}
+    all_keys = set(flatten(d.keys() for d in ds))
+
+    for key in all_keys:
+        valid_dicts = list(filter(lambda d: key in d, ds))
+        if len(valid_dicts) == 1:
+            res[key] = valid_dicts[0][key]
+        elif all(isinstance(d[key], dict) for d in valid_dicts):
+            res[key] = merge_dicts_with_policy((d[key] for d in valid_dicts), policy)
+        else:
+            policy_res = policy(key, [d[key] for d in valid_dicts])
+            if not isinstance(policy_res, Empty):
+                res[key] = policy_res
+    return res
+
+
+def dict_without_keys(d: dict[K, V], keys: Iterable[K]) -> dict[K, V]:
+    d_ = copy.copy(d)
+    for key in keys:
+        if key in d_:
+            del d_[key]
+    return d_
 
 
 _GraphT = TypeVar("_GraphT", bound=nx.Graph)
