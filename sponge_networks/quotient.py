@@ -8,6 +8,7 @@ original graph.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import reduce
+from itertools import product
 import operator
 from typing import (
     Any,
@@ -44,8 +45,10 @@ from sponge_networks.utils.utils import (
     Mutated,
     NDArrayT,
     Node,
+    Pair,
     StateArray,
     StateArraySlice,
+    all_equals,
     const,
     const_iter,
     copy_graph,
@@ -57,60 +60,113 @@ from sponge_networks.utils.utils import (
 )
 from sponge_networks.sponge_networks import SpongeNetwork
 
+__all__ = ["QuotientNode", "QuotientNetwork"]
+
 QuotientNode: TypeAlias = Node | frozenset[Node]
 
 
 class QuotientNetwork(Generic[Node]):
     def __init__(
-        self, original_network: ResourceNetwork[Node], quotient_vertices: set[set[Node]]
+        self, original_network: ResourceNetwork[Node], quotient_nodes: set[set[Node]]
     ) -> None:
         self.original_network = original_network
+        # self.
 
     @staticmethod
-    def generate_quotient_graph(
-        G: nx.DiGraph, quotient_vertices: set[set[Node]]
-    ) -> nx.DiGraph:
-        all_quotient_vertices = flatten(quotient_vertices)
-        if not all(v in G.nodes for v in all_quotient_vertices):
-            raise ValueError("some unknown vertices encountered")
-        if len(set(all_quotient_vertices)) != len(all_quotient_vertices):
-            raise ValueError("repeated vertices encountered")
+    def _nodes_merge_policy(key: Any, xs: list[T]) -> T | Empty:
+        if key == "pos":
+            return Empty()
+        if not all_equals(xs):
+            raise ValueError(f"cannot merge parameters '{xs=}'")
+        return xs[0]
 
-        quotient_entry = reduce(
+    @staticmethod
+    def _merge_edges_policy(key: Any, xs: list[T]) -> list[T] | float:
+        return float(np.average(xs)) if key == "weight" else xs
+
+    @classmethod
+    def _create_edge_by_vertex_sets(
+        cls, G: nx.DiGraph, start: frozenset[Node], end: frozenset[Node]
+    ) -> dict:
+        is_loop = start == end
+        edges_to_consider: set[Pair[Node]] = set()
+        for start_vertex in start:
+            for incident_to_start_vertex in G[start_vertex]:
+                if incident_to_start_vertex in end:
+                    if not is_loop or start_vertex == incident_to_start_vertex:
+                        edges_to_consider.add((start_vertex, incident_to_start_vertex))
+
+        # avg_weight = float(
+        #     np.average(
+        #         [
+        #             (G.edges[e]["weight"] if "weight" in G.edges[e] else 0.0)
+        #             for e in edges_to_consider
+        #         ]
+        #     )
+        # )
+        res_edge = merge_dicts_with_policy(
+            (G.edges[e] for e in edges_to_consider), cls._merge_edges_policy
+        )
+        # res_edge["weight"] = avg_weight  # type: ignore
+        return res_edge
+
+    def generate_quotient_graph(
+        self, G: nx.DiGraph, quotient_nodes: set[set[Node]]
+    ) -> tuple[nx.DiGraph, dict[Node, frozenset[Node]]]:
+        all_quotient_nodes_ = flatten(quotient_nodes)
+        if not all(v in G.nodes for v in all_quotient_nodes_):
+            raise ValueError("some unknown vertices encountered")
+        if len(set(all_quotient_nodes_)) != len(all_quotient_nodes_):
+            raise ValueError("repeated vertices encountered")
+        all_quotient_nodes = set(all_quotient_nodes_)
+        nonquotient_nodes: list[Node] = list(
+            filter(lambda v: v not in all_quotient_nodes_, G.nodes)
+        )
+        quotient_entry: dict[Node, frozenset[Node]] = reduce(
             lambda x, y: x | y,
             (
                 {node: frozenset(nodeset) for node in nodeset}
-                for nodeset in quotient_vertices
+                for nodeset in quotient_nodes
             ),
-            dict[Node, QuotientNode[Node]](),
+            dict[Node, frozenset[Node]](),
         )
-        for node in G.nodes:
-            if node not in quotient_entry:
-                quotient_entry[node] = node
-
-        def nodes_merge_policy(key: Any, xs: list[T]) -> T | Empty:
-            if key == "pos":
-                return Empty()
-            if not all(map(lambda x, y: x == y, xs[:-1], xs[1:])):
-                raise ValueError(f"cannot merge parameters '{xs=}'")
-            return xs[0]
+        quotient_entry |= {node: frozenset({node}) for node in nonquotient_nodes}
 
         nodes_to_add: dict[QuotientNode[Node], Any] = {}
-        for nodeset in quotient_vertices:
+        for nodeset in quotient_nodes:
             nodes_to_add[frozenset(nodeset)] = merge_dicts_with_policy(
                 (G.nodes[node] for node in nodeset),
-                nodes_merge_policy,
+                self._nodes_merge_policy,
             )
-
-        #     node_or_set: copy(G.nodes[node])
-        #     for node, node_or_set in quotient_entry.items()
-        # }
 
         G_q = nx.DiGraph()
 
-        # Graph and nodes properties are simply copied
+        # Graph and nodes properties are copied more or less without change
         G_q.graph = copy(G.graph)
         G_q.add_nodes_from(nodes_to_add.items())
 
         # when it comes to edges it's interesting
-        return G_q
+        edges_to_add: dict[Pair[QuotientNode[Node]], Any] = {}
+        for e in G.edges:
+            n1, n2 = cast(Pair[Node], e)
+            n1_nonq = n1 in nonquotient_nodes
+            n2_nonq = n2 in nonquotient_nodes
+
+            # old behaviour is just preserved:
+            if n1_nonq and n2_nonq:
+                edges_to_add[e] = G.edges[e]
+            else:
+                if n1_nonq and not n2_nonq:
+                    new_e = (n1, quotient_entry[n2])
+                elif not n1_nonq and n2_nonq:
+                    new_e = (quotient_entry[n1], n2)
+                elif not n1_nonq and not n2_nonq:
+                    new_e = (quotient_entry[n1], quotient_entry[n2])
+                # tertium non datur
+                if new_e not in edges_to_add:
+                    e_attr = self._create_edge_by_vertex_sets(
+                        G, quotient_entry[n1], quotient_entry[n2]
+                    )
+                    edges_to_add[new_e] = e_attr
+        G_q.add_edges_from(edges_to_add)
+        return G_q, quotient_entry

@@ -49,6 +49,8 @@ Mutated = Annotated[T, "this variable is subject to change"]
 
 AnyFloat: TypeAlias = np.float64
 
+Pair: TypeAlias = tuple[T, T]
+
 
 def lmap(f: Callable[[T1], T2], x: Iterable[T1]) -> list[T2]:
     return list(map(f, x))
@@ -116,6 +118,17 @@ def flatten(x: Iterable[Iterable[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(x))
 
 
+def all_equals(
+    elements: Sequence[T], eq: Callable[[T, T], bool] = lambda x, y: x == y
+) -> bool:
+    if len(elements) < 2:
+        return True
+    for i in range(len(elements) - 1):
+        if not eq(elements[i], elements[i + 1]):
+            return False
+    return True
+
+
 class NeverError(BaseException):
     """
     You should never encounter this
@@ -156,12 +169,13 @@ def merge_dicts_with_policy(
 
     for key in all_keys:
         valid_dicts = list(filter(lambda d: key in d, ds))
-        if len(valid_dicts) == 1:
+        vals = list(d[key] for d in valid_dicts)
+        if all_equals(vals):
             res[key] = valid_dicts[0][key]
-        elif all(isinstance(d[key], dict) for d in valid_dicts):
-            res[key] = merge_dicts_with_policy((d[key] for d in valid_dicts), policy)
+        elif all(isinstance(val, dict) for val in vals):
+            res[key] = merge_dicts_with_policy(vals, policy)
         else:
-            policy_res = policy(key, [d[key] for d in valid_dicts])
+            policy_res = policy(key, vals)
             if not isinstance(policy_res, Empty):
                 res[key] = policy_res
     return res

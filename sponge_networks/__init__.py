@@ -15,3 +15,4 @@ from .sponge_networks import (
     grid_with_positions,
     build_sponge_network,
 )
+from .quotient import *
