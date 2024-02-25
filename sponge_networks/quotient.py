@@ -14,6 +14,7 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Iterable,
     Literal,
     Optional,
     Protocol,
@@ -67,14 +68,20 @@ QuotientNode: TypeAlias = Node | frozenset[Node]
 
 class QuotientNetwork(Generic[Node]):
     def __init__(
-        self, original_network: ResourceNetwork[Node], quotient_nodes: set[set[Node]]
+        self,
+        original_network: ResourceNetwork[Node],
+        quotient_nodes: Iterable[Iterable[Node]],
     ) -> None:
         self.original_network: ResourceNetwork[Node] = original_network
-        self._quotient_nodes: set[set[Node]] = quotient_nodes
 
+        quotient_nodes_frozen: list[frozenset[Node]] = list(
+            map(frozenset, quotient_nodes)
+        )
         all_quotient_nodes_ = flatten(quotient_nodes)
         G = original_network._G
-        self._check_quotient_constraints(G, all_quotient_nodes_)
+
+        self._check_quotient_constraints(G, quotient_nodes_frozen, all_quotient_nodes_)
+        self._quotient_nodes: set[frozenset[Node]] = set(quotient_nodes_frozen)
 
         self._all_quotient_nodes: set[Node] = set(all_quotient_nodes_)
         self._nonquotient_nodes: list[Node] = list(
@@ -98,7 +105,10 @@ class QuotientNetwork(Generic[Node]):
 
     @classmethod
     def _check_quotient_constraints(
-        cls, G: nx.DiGraph, all_quotient_nodes_: list[Node]
+        cls,
+        G: nx.DiGraph,
+        quotient_nodes_frozen: list[frozenset[Node]],
+        all_quotient_nodes_: list[Node],
     ) -> None:
         if not all(v in G.nodes for v in all_quotient_nodes_):
             raise ValueError("some unknown vertices encountered")
@@ -182,5 +192,5 @@ class QuotientNetwork(Generic[Node]):
                         G, self.quotient_entry[n1], self.quotient_entry[n2]
                     )
                     edges_to_add[new_e] = e_attr
-        G_q.add_edges_from(edges_to_add)
+        G_q.add_edges_from((u, v, d) for (u, v), d in edges_to_add.items())
         return G_q

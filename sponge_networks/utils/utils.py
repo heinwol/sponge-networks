@@ -165,6 +165,7 @@ def merge_dicts_with_policy(
     ds: Iterable[dict[K, V1]], policy: DictMergePolicy[K, V1, V2]
 ) -> dict[K, V2]:
     res = {}
+    ds = list(ds)
     all_keys = set(flatten(d.keys() for d in ds))
 
     for key in all_keys:
