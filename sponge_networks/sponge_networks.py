@@ -9,7 +9,7 @@ from .resource_networks import *
 from .utils.utils import *
 
 
-class ResourceNetworkGreedy(ResourceNetwork):
+class ResourceNetworkGreedy(Generic[Node], ResourceNetwork[Node]):
     def __init__(self, G: nx.DiGraph | None = None):
         self.adjacency_matrix_without_loops: NDArrayT[AnyFloat]
         self.stochastic_matrix_without_loops: NDArrayT[AnyFloat]
@@ -194,7 +194,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
             grid = self.generate_sinks(grid)
         grid = self.final_grid_hook(grid)
 
-        resource_network = ResourceNetworkGreedy(grid)
+        resource_network = ResourceNetworkGreedy[SpongeNode](grid)
 
         upper_nodes = self.upper_nodes()
         bottom_nodes = self.bottom_nodes()
@@ -210,7 +210,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
 class SpongeNetwork:
     def __init__(
         self,
-        resource_network: ResourceNetworkGreedy,
+        resource_network: ResourceNetworkGreedy[SpongeNode],
         upper_nodes: list[SpongeNode],
         bottom_nodes: Optional[list[SpongeNode]],
         built_with: AbstractSpongeNetworkBuilder[LayoutT],

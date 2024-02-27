@@ -185,3 +185,17 @@ class QuotientNetwork(Generic[Node]):
                     edges_to_add[new_e] = e_attr
         G_q.add_edges_from((u, v, d) for (u, v), d in edges_to_add.items())
         return G_q
+
+    # def run_simulation(
+    #     self, initial_state: dict[QuotientNode[Node], float] | list[float], n_iters: int = 30
+    # ) -> StateArray[QuotientNode[Node]]:
+
+
+class QuotientSpongeNetwork:
+    def __init__(
+        self,
+        original_network: SpongeNetwork,
+        quotient_nodes: Iterable[Iterable[Node]],
+    ) -> None: ...
+
+    # def _reduce_vertices
