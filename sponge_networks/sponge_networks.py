@@ -202,6 +202,8 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
             resource_network=resource_network,
             upper_nodes=upper_nodes,
             bottom_nodes=bottom_nodes,
+            built_with=self,
+            builder_is_correct=True,
         )
 
 
@@ -211,6 +213,8 @@ class SpongeNetwork:
         resource_network: ResourceNetworkGreedy,
         upper_nodes: list[SpongeNode],
         bottom_nodes: Optional[list[SpongeNode]],
+        built_with: AbstractSpongeNetworkBuilder[LayoutT],
+        builder_is_correct: bool,
     ) -> None:
         """
         ## Warning!
@@ -219,6 +223,8 @@ class SpongeNetwork:
         self.resource_network = resource_network
         self.upper_nodes = upper_nodes
         self.bottom_nodes = bottom_nodes
+        self.built_with = built_with
+        self.builder_is_correct = builder_is_correct
 
     @classmethod
     def build(cls, builder: AbstractSpongeNetworkBuilder) -> Self:
@@ -262,7 +268,11 @@ class SpongeNetwork:
         )
         rn = type(self.resource_network)(G)
         return type(self)(
-            resource_network=rn, upper_nodes=upper_nodes, bottom_nodes=bottom_nodes
+            resource_network=rn,
+            upper_nodes=upper_nodes,
+            bottom_nodes=bottom_nodes,
+            built_with=self.built_with,
+            builder_is_correct=False,
         )
 
     def run_sponge_simulation(
