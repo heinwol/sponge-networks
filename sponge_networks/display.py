@@ -8,6 +8,7 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Hashable,
     Literal,
     Optional,
     Protocol,
@@ -22,6 +23,7 @@ from typing import (
 )
 import networkx as nx
 import numpy as np
+import returns
 from toolz import valmap
 
 from IPython.core.display import SVG
@@ -168,151 +170,178 @@ class DrawableGraphWithContext(Generic[T]):
 
     original_graph: nx.DiGraph
     display_context: T
-    drawing_graph: nx.DiGraph
+    drawing_graph: nx.DiGraph = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.drawing_graph = copy_graph(self.original_graph)
 
 
 @dataclass
 class JustDrawable(DrawableGraphWithContext[None]):
     @classmethod
     def new(cls, G: nx.DiGraph) -> Self:
-        return cls(G, None, copy_graph(G))
+        return cls(G, None)
+
+    def plot(self, scale: float) -> SVG:
+        G_d = self.drawing_graph
+
+        set_object_property_nested(
+            G_d.graph, {"graph": {"scale": scale}}, priority="right"
+        )
+
+        G_d = _ensure_graph_layout(G_d)
+
+        for u, v in G_d.edges:
+            G_d.edges[u, v]["label"] = G_d.edges[u, v]["weight"]
+
+        return SVG(nx.nx_pydot.to_pydot(G_d).create_svg())
 
 
 @dataclass
-class SimulationContext:
+class SimulationContext(Generic[Node]):
+    sim: StateArray[Node]
     scale: float = 1.0
+
+
+class _SimulationDrawableT(Protocol[Node]):
+    @property
+    def display_context(self) -> SimulationContext[Node]: ...
+
+
+def _display_states_as_list_parrallel(
+    drawable: _SimulationDrawableT[Node],
+    batch_processor: Callable[
+        [_SimulationDrawableT[Node], list[StateArraySlice[Node]]],
+        list[T],
+    ],
+) -> list[T]:
+    sim = drawable.display_context.sim
+    cpu_count = os.cpu_count()
+    n_pools = min(cpu_count or 1, len(sim.states_arr))
+    pool_obj = multiprocessing.Pool(n_pools)
+    rngs = parallelize_range(n_pools, range(len(sim)))
+    states_packs: list[list[StateArraySlice[Node]]] = [
+        [sim[i] for i in pack] for pack in rngs
+    ]
+    res: list[list[T]] = pool_obj.starmap(
+        batch_processor,
+        zip(const_iter(drawable), states_packs),
+    )
+    return flatten(res)
+
+
+@dataclass
+class SimulationWithChangingWidthContext(Generic[Node], SimulationContext[Node]):
     max_node_width: float = 1.1
 
 
 @dataclass
-class SimulationDrawable(DrawableGraphWithContext[SimulationContext]):
+class SimulationWithChangingWidthDrawable(
+    Generic[Node], DrawableGraphWithContext[SimulationWithChangingWidthContext[Node]]
+):
     @classmethod
     def new(
         cls,
         G: nx.DiGraph,
+        sim: StateArray[Node],
         scale: Optional[float] = None,
         max_node_width: Optional[float] = None,
     ) -> Self:
         return cls(
             G,
-            SimulationContext(
-                scale=(scale or SimulationContext.scale),
-                max_node_width=(max_node_width or SimulationContext.max_node_width),
+            SimulationWithChangingWidthContext(
+                sim=sim,
+                scale=(scale or SimulationWithChangingWidthContext.scale),
+                max_node_width=(
+                    max_node_width or SimulationWithChangingWidthContext.max_node_width
+                ),
             ),
-            copy_graph(G),
         )
 
+    def plot_with_states(
+        self, prop_setter: Optional[Callable[[nx.DiGraph], None]] = None
+    ) -> list[SVG]:
+        G = self.drawing_graph
+        scale = self.display_context.scale
+        max_node_width = self.display_context.max_node_width
 
-def plot(G: nx.DiGraph, scale: float) -> SVG:
-    drawable = JustDrawable.new(G)
-    G_d = drawable.drawing_graph
+        set_object_property_nested(
+            G.graph, {"graph": {"scale": scale}}, priority="right"
+        )
+        # G.graph["graph"] = {"scale": scale}  # type: ignore
 
-    set_object_property_nested(G_d.graph, {"graph": {"scale": scale}}, priority="right")
-    # G_d.graph["graph"]["scale"] = scale  # type: ignore
+        G.graph["node"] = {  # type: ignore
+            "fontsize": 10 * scale,
+            "shape": "circle",
+            "style": "filled",
+            "fillcolor": "#f0fff4",
+            "fixedsize": True,
+        }
 
-    G_d = _ensure_graph_layout(G_d)
+        if prop_setter is not None:
+            prop_setter(G)
 
-    for u, v in G_d.edges:
-        G_d.edges[u, v]["label"] = G_d.edges[u, v]["weight"]
+        max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
+        min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
+        if np.allclose(max_weight, min_weight):
+            calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
+        else:
+            calc_edge_width = linear_func_from_2_points(
+                (min_weight, 0.6 + scale), (max_weight, 4 * scale)
+            )
 
-    return SVG(nx.nx_pydot.to_pydot(G_d).create_svg())
+        G = _ensure_graph_layout(G)
 
+        for u, v in G.edges:
+            weight = self.original_graph.edges[u, v]["weight"]
+            G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
+            G.edges[u, v]["penwidth"] = calc_edge_width(weight)
+            G.edges[u, v]["arrowsize"] = 0.4 * scale
+            G.edges[u, v]["fontsize"] = 10 * scale
+            G.edges[u, v]["fontcolor"] = "black"
+            G.edges[u, v]["color"] = "#f3ad5c99"
 
-def parallel_plot(
-    drawable: SimulationDrawable,
-    states: list[StateArraySlice[Node]],
-) -> list[SVG]:
-    G = drawable.drawing_graph
-    scale = drawable.display_context.scale
+        _add_void_nodes(G, max_node_width, scale)
+        return _display_states_as_list_parrallel(
+            self,
+            self._plot_batches,  # type: ignore
+        )
 
-    total_sum: float = states[0]["states"].arr.sum()
-    calc_node_width = (
-        linear_func_from_2_points((0, 0.3 * scale), (total_sum, 1.0 * scale))
-        if total_sum > 0
-        else const(0.3 * scale)
-    )
-    res: list[SVG] = [None] * len(states)  # type: ignore
-    for n_it, state in enumerate(states):
-        for v in G.nodes:
-            v = cast(Node, v)
-            if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
-                G.nodes[v]["label"] = _format_vertex_resource_for_simulation_display(
-                    cast(AnyFloat, state["states"][[v]])
-                )
-                G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))  # type: ignore
+    def _plot_batches(self, states: list[StateArraySlice[Node]]) -> list[SVG]:
+        G = self.drawing_graph
+        scale = self.display_context.scale
 
-                G.nodes[v]["fillcolor"] = (
-                    "#f0fff4"
-                    if (
-                        state["states"][[v]] < state["total_output_res"][[v]]  # type: ignore
-                        and not np.isclose(state["total_output_res"][[v]], 0)
+        total_sum: float = states[0]["states"].arr.sum()
+        calc_node_width = (
+            linear_func_from_2_points((0, 0.3 * scale), (total_sum, 1.0 * scale))
+            if total_sum > 0
+            else const(0.3 * scale)
+        )
+        res: list[SVG] = [None] * len(states)  # type: ignore
+        for n_it, state in enumerate(states):
+            for v in G.nodes:
+                v = cast(Node, v)
+                if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
+                    G.nodes[v]["label"] = (
+                        _format_vertex_resource_for_simulation_display(
+                            cast(AnyFloat, state["states"][[v]])
+                        )
                     )
-                    else "#b48ead"
-                )
+                    G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))  # type: ignore
 
-        for u, v, d in G.edges(data=True):
-            d["label"] = d["weight"]
-        res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
-    return cast(list[SVG], res)
+                    G.nodes[v]["fillcolor"] = (
+                        "#f0fff4"
+                        if (
+                            state["states"][[v]] < state["total_output_res"][[v]]  # type: ignore
+                            and not np.isclose(state["total_output_res"][[v]], 0)
+                        )
+                        else "#b48ead"
+                    )
 
-
-def plot_with_states(
-    drawable: SimulationDrawable,
-    states: StateArray[Node],
-    prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-) -> list[SVG]:
-    G = drawable.drawing_graph
-    scale = drawable.display_context.scale
-    max_node_width = drawable.display_context.max_node_width
-
-    set_object_property_nested(G.graph, {"graph": {"scale": scale}}, priority="right")
-    # G.graph["graph"] = {"scale": scale}  # type: ignore
-
-    G.graph["node"] = {  # type: ignore
-        "fontsize": 10 * scale,
-        "shape": "circle",
-        "style": "filled",
-        "fillcolor": "#f0fff4",
-        "fixedsize": True,
-    }
-
-    if prop_setter is not None:
-        prop_setter(G)
-
-    max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
-    min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
-    if np.allclose(max_weight, min_weight):
-        calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
-    else:
-        calc_edge_width = linear_func_from_2_points(
-            (min_weight, 0.6 + scale), (max_weight, 4 * scale)
-        )
-
-    G = _ensure_graph_layout(G)
-
-    for u, v in G.edges:
-        weight = drawable.original_graph.edges[u, v]["weight"]
-        G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
-        G.edges[u, v]["penwidth"] = calc_edge_width(weight)
-        G.edges[u, v]["arrowsize"] = 0.4 * scale
-        G.edges[u, v]["fontsize"] = 10 * scale
-        G.edges[u, v]["fontcolor"] = "black"
-        G.edges[u, v]["color"] = "#f3ad5c99"
-
-    _add_void_nodes(G, max_node_width, scale)
-
-    cpu_count = os.cpu_count()
-    n_pools = min(cpu_count or 1, len(states.states_arr))
-    pool_obj = multiprocessing.Pool(n_pools)
-    rngs = parallelize_range(n_pools, range(len(states)))
-    states_packs: list[list[StateArraySlice[Node]]] = [
-        [states[i] for i in pack] for pack in rngs
-    ]
-    svgs: list[list[SVG]] = pool_obj.starmap(
-        parallel_plot,
-        zip(const_iter(drawable), states_packs),
-    )
-    return flatten(svgs)
+            for u, v, d in G.edges(data=True):
+                d["label"] = d["weight"]
+            res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
+        return cast(list[SVG], res)
 
 
 def display_svgs_interactively(

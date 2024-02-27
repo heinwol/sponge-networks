@@ -135,22 +135,13 @@ class QuotientNetwork(Generic[Node]):
         edges_to_consider: set[Pair[Node]] = set()
         for start_vertex in start:
             for incident_to_start_vertex in G[start_vertex]:
-                if incident_to_start_vertex in end:
-                    if not is_loop or start_vertex == incident_to_start_vertex:
-                        edges_to_consider.add((start_vertex, incident_to_start_vertex))
-
-        # avg_weight = float(
-        #     np.average(
-        #         [
-        #             (G.edges[e]["weight"] if "weight" in G.edges[e] else 0.0)
-        #             for e in edges_to_consider
-        #         ]
-        #     )
-        # )
+                if incident_to_start_vertex in end and (
+                    not is_loop or start_vertex == incident_to_start_vertex
+                ):
+                    edges_to_consider.add((start_vertex, incident_to_start_vertex))
         res_edge = merge_dicts_with_policy(
             (G.edges[e] for e in edges_to_consider), cls._merge_edges_policy
         )
-        # res_edge["weight"] = avg_weight  # type: ignore
         return res_edge
 
     def generate_quotient_graph(self) -> nx.DiGraph:
