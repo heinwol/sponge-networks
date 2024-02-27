@@ -186,7 +186,13 @@ class JustDrawable(DrawableGraphWithContext[None]):
         G_d = self.drawing_graph
 
         set_object_property_nested(
-            G_d.graph, {"graph": {"scale": scale}}, priority="right"
+            G_d.graph,
+            {
+                "graph": {"scale": scale},
+                "node": {"fontsize": 8 * scale},
+                "edge": {"arrowsize": 0.4 * scale, "fontsize": 8 * scale},
+            },
+            priority="right",
         )
 
         G_d = _ensure_graph_layout(G_d)
