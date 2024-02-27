@@ -214,7 +214,7 @@ class ResourceNetwork(Generic[Node]):
     ) -> list[SVG]:
         return SimulationWithChangingWidthDrawable.new(
             self._G, sim=states, scale=scale, max_node_width=max_node_width
-        ).plot_with_states(prop_setter=prop_setter)
+        ).plot(prop_setter=prop_setter)
 
     def plot(self, scale: float = 1.7) -> SVG:
         return JustDrawable.new(self._G).plot(scale=scale)

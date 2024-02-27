@@ -85,15 +85,14 @@ def _format_vertex_resource_for_simulation_display(x: AnyFloat | int) -> str:
     return str(x_int) + "." + rem
 
 
-def _gen_graph_pydot_layout(G: nx.DiGraph) -> Mutated[nx.DiGraph]:
+def _gen_graph_pydot_layout(G: nx.DiGraph) -> None:
     layout = nx.nx_pydot.pydot_layout(G, prog="neato")
     layout_new = valmap(lambda x: (x[0] / 45, x[1] / 45), layout)
     for v in G.nodes:
         G.nodes[v]["pos"] = f"{layout_new[v][0]},{layout_new[v][1]}!"
-    return G
 
 
-def _ensure_graph_layout(G: nx.DiGraph) -> nx.DiGraph:
+def _ensure_graph_layout(G: nx.DiGraph) -> None:
     set_object_property_nested(G.graph, {"graph": {"layout": "neato"}}, priority="left")
     # if not ("graph" in G.graph and "layout" in G.graph["graph"]):
     #     G.graph["graph"]["layout"] = "neato"  # some magic happens here
@@ -113,8 +112,7 @@ def _ensure_graph_layout(G: nx.DiGraph) -> nx.DiGraph:
                         """
                 )
     else:
-        G = _gen_graph_pydot_layout(G)
-    return G
+        _gen_graph_pydot_layout(G)
 
 
 def _add_void_nodes(G: nx.DiGraph, node_width: float, scale: float) -> None:
@@ -195,7 +193,7 @@ class JustDrawable(DrawableGraphWithContext[None]):
             priority="right",
         )
 
-        G_d = _ensure_graph_layout(G_d)
+        _ensure_graph_layout(G_d)
 
         for u, v in G_d.edges:
             G_d.edges[u, v]["label"] = G_d.edges[u, v]["weight"]
@@ -264,28 +262,12 @@ class SimulationWithChangingWidthDrawable(
             ),
         )
 
-    def plot_with_states(
+    def plot(
         self, prop_setter: Optional[Callable[[nx.DiGraph], None]] = None
     ) -> list[SVG]:
         G = self.drawing_graph
         scale = self.display_context.scale
         max_node_width = self.display_context.max_node_width
-
-        set_object_property_nested(
-            G.graph, {"graph": {"scale": scale}}, priority="right"
-        )
-        # G.graph["graph"] = {"scale": scale}  # type: ignore
-
-        G.graph["node"] = {  # type: ignore
-            "fontsize": 10 * scale,
-            "shape": "circle",
-            "style": "filled",
-            "fillcolor": "#f0fff4",
-            "fixedsize": True,
-        }
-
-        if prop_setter is not None:
-            prop_setter(G)
 
         max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
         min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
@@ -293,24 +275,45 @@ class SimulationWithChangingWidthDrawable(
             calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
         else:
             calc_edge_width = linear_func_from_2_points(
-                (min_weight, 0.6 + scale), (max_weight, 4 * scale)
+                (min_weight, 0.6 * scale), (max_weight, 4 * scale)
             )
 
-        G = _ensure_graph_layout(G)
+        _ensure_graph_layout(G)
+
+        set_object_property_nested(
+            G.graph,
+            {
+                "graph": {"scale": scale},
+                "node": {  # type: ignore
+                    "fontsize": 10 * scale,
+                    "shape": "circle",
+                    "style": "filled",
+                    "fillcolor": "#f0fff4",
+                    "fixedsize": True,
+                },
+                "edge": {
+                    "arrowsize": 0.4 * scale,
+                    "fontsize": 10 * scale,
+                    "fontcolor": "black",
+                    "color": "#f3ad5c99",
+                },
+            },
+            priority="right",
+        )
+
+        if prop_setter is not None:
+            prop_setter(G)
 
         for u, v in G.edges:
             weight = self.original_graph.edges[u, v]["weight"]
             G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
             G.edges[u, v]["penwidth"] = calc_edge_width(weight)
-            G.edges[u, v]["arrowsize"] = 0.4 * scale
-            G.edges[u, v]["fontsize"] = 10 * scale
-            G.edges[u, v]["fontcolor"] = "black"
-            G.edges[u, v]["color"] = "#f3ad5c99"
 
         _add_void_nodes(G, max_node_width, scale)
+
         return _display_states_as_list_parrallel(
             self,
-            self._plot_batches,  # type: ignore
+            type(self)._plot_batches,  # type: ignore
         )
 
     def _plot_batches(self, states: list[StateArraySlice[Node]]) -> list[SVG]:
