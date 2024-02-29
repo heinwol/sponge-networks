@@ -209,12 +209,12 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
         )
 
 
-class SpongeNetwork:
+class SpongeNetwork(Generic[Node]):
     def __init__(
         self,
-        resource_network: ResourceNetworkGreedy[SpongeNode],
-        upper_nodes: list[SpongeNode],
-        sink_nodes: set[SpongeNode],
+        resource_network: ResourceNetworkGreedy[Node],
+        upper_nodes: list[Node],
+        sink_nodes: set[Node],
         built_with: AbstractSpongeNetworkBuilder[LayoutT],
         builder_is_correct: bool,
     ) -> None:
@@ -234,8 +234,8 @@ class SpongeNetwork:
 
     def initial_state_processor(
         self,
-        initial_state_short: list[float] | dict[SpongeNode, float],
-    ) -> dict[SpongeNode, float]:
+        initial_state_short: list[float] | dict[Node, float],
+    ) -> dict[Node, float]:
         if isinstance(initial_state_short, dict):
             return initial_state_short
         elif len(self.upper_nodes) == len(initial_state_short):
@@ -248,8 +248,8 @@ class SpongeNetwork:
     def altered(
         self,
         callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]],
-        new_upper_nodes: Optional[Iterable[SpongeNode]] = None,
-        new_sink_nodes: Optional[Iterable[SpongeNode]] = None,
+        new_upper_nodes: Optional[Iterable[Node]] = None,
+        new_sink_nodes: Optional[Iterable[Node]] = None,
     ) -> Self:
         G = self.resource_network.G
         res = callback(G)
@@ -282,8 +282,8 @@ class SpongeNetwork:
         )
 
     def run_sponge_simulation(
-        self, initial_state: dict[SpongeNode, float] | list[float], n_iters: int = 30
-    ) -> StateArray[SpongeNode]:
+        self, initial_state: dict[Node, float] | list[float], n_iters: int = 30
+    ) -> StateArray[Node]:
         """
         ## Warning
         `initial_state` applies only to the upper nodes. In case of list,
@@ -295,7 +295,7 @@ class SpongeNetwork:
 
     def plot_simulation(
         self,
-        sim: StateArray[SpongeNode],
+        sim: StateArray[Node],
         prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
         scale: float = 1.0,
     ) -> ipywidgets.interactive:
