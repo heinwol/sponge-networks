@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from functools import reduce
 from itertools import product
 import operator
+from pydoc import classname
 from typing import (
     Any,
     Callable,
@@ -59,32 +60,25 @@ from sponge_networks.utils.utils import (
     parallelize_range,
     set_object_property_nested,
 )
-from sponge_networks.sponge_networks import SpongeNetwork
+from sponge_networks.sponge_networks import SpongeNetwork, SpongeNode
 
 __all__ = ["QuotientNode", "QuotientNetwork"]
 
 QuotientNode: TypeAlias = Node | frozenset[Node]
 
 
-class QuotientNetwork(Generic[Node]):
-    def __init__(
-        self,
-        original_network: ResourceNetwork[Node],
-        quotient_nodes: Iterable[Iterable[Node]],
-    ) -> None:
-        self.original_network: ResourceNetwork[Node] = original_network
-
+class _QuotientProperties(Generic[Node]):
+    def __init__(self, G: nx.DiGraph, quotient_nodes: Iterable[Iterable[Node]]) -> None:
         quotient_nodes_frozen: list[frozenset[Node]] = list(
             map(frozenset, quotient_nodes)
         )
         all_quotient_nodes_ = flatten(quotient_nodes)
-        G = original_network._G
 
         self._check_quotient_constraints(G, quotient_nodes_frozen, all_quotient_nodes_)
-        self._quotient_nodes: set[frozenset[Node]] = set(quotient_nodes_frozen)
+        self.quotient_nodes_sets: set[frozenset[Node]] = set(quotient_nodes_frozen)
 
-        self._all_quotient_nodes: set[Node] = set(all_quotient_nodes_)
-        self._nonquotient_nodes: list[Node] = list(
+        self.all_quotient_nodes: set[Node] = set(all_quotient_nodes_)
+        self.nonquotient_nodes: list[Node] = list(
             filter(lambda v: v not in all_quotient_nodes_, G.nodes)
         )
         self.quotient_entry: dict[Node, frozenset[Node]] = reduce(
@@ -96,12 +90,8 @@ class QuotientNetwork(Generic[Node]):
             dict[Node, frozenset[Node]](),
         )
         self.quotient_entry |= {
-            node: frozenset({node}) for node in self._nonquotient_nodes
+            node: frozenset({node}) for node in self.nonquotient_nodes
         }
-
-        self.quotient_network: ResourceNetwork[Node] = type(original_network)(
-            self.generate_quotient_graph()
-        )
 
     @classmethod
     def _check_quotient_constraints(
@@ -114,6 +104,22 @@ class QuotientNetwork(Generic[Node]):
             raise ValueError("some unknown vertices encountered")
         if len(set(all_quotient_nodes_)) != len(all_quotient_nodes_):
             raise ValueError("repeated vertices encountered")
+
+
+class QuotientNetwork(Generic[Node]):
+    def __init__(
+        self,
+        original_network: ResourceNetwork[Node],
+        quotient_nodes: Iterable[Iterable[Node]],
+    ) -> None:
+        self.original_network: ResourceNetwork[Node] = original_network
+        self.quotient_properties = _QuotientProperties(
+            original_network._G, quotient_nodes
+        )
+
+        self.quotient_network: ResourceNetwork[Node] = type(original_network)(
+            self.generate_quotient_graph()
+        )
 
     @classmethod
     def _nodes_merge_policy(cls, key: Any, xs: list[T]) -> T | Empty:
@@ -146,9 +152,10 @@ class QuotientNetwork(Generic[Node]):
 
     def generate_quotient_graph(self) -> nx.DiGraph:
         G = self.original_network._G
+        quotient_entry = self.quotient_properties.quotient_entry
 
         nodes_to_add: dict[QuotientNode[Node], Any] = {}
-        for nodeset in self._quotient_nodes:
+        for nodeset in self.quotient_properties.quotient_nodes_sets:
             nodes_to_add[frozenset(nodeset)] = merge_dicts_with_policy(
                 (G.nodes[node] for node in nodeset),
                 self._nodes_merge_policy,
@@ -164,23 +171,23 @@ class QuotientNetwork(Generic[Node]):
         edges_to_add: dict[Pair[QuotientNode[Node]], Any] = {}
         for e in G.edges:
             n1, n2 = cast(Pair[Node], e)
-            n1_nonq = n1 in self._nonquotient_nodes
-            n2_nonq = n2 in self._nonquotient_nodes
+            n1_nonq = n1 in self.quotient_properties.nonquotient_nodes
+            n2_nonq = n2 in self.quotient_properties.nonquotient_nodes
 
             # old behaviour is just preserved:
             if n1_nonq and n2_nonq:
                 edges_to_add[e] = G.edges[e]
             else:
                 if n1_nonq and not n2_nonq:
-                    new_e = (n1, self.quotient_entry[n2])
+                    new_e = (n1, quotient_entry[n2])
                 elif not n1_nonq and n2_nonq:
-                    new_e = (self.quotient_entry[n1], n2)
+                    new_e = (quotient_entry[n1], n2)
                 elif not n1_nonq and not n2_nonq:
-                    new_e = (self.quotient_entry[n1], self.quotient_entry[n2])
+                    new_e = (quotient_entry[n1], quotient_entry[n2])
                 # tertium non datur
                 if new_e not in edges_to_add:
                     e_attr = self._create_edge_by_vertex_sets(
-                        G, self.quotient_entry[n1], self.quotient_entry[n2]
+                        G, quotient_entry[n1], quotient_entry[n2]
                     )
                     edges_to_add[new_e] = e_attr
         G_q.add_edges_from((u, v, d) for (u, v), d in edges_to_add.items())
@@ -192,10 +199,67 @@ class QuotientNetwork(Generic[Node]):
 
 
 class QuotientSpongeNetwork:
+    """
+    Since the notion of a "Sponge Network" is too vague and the ability of the
+    `SpongeNetwork` class to reflect is limited and sometimes faulty, no one can
+    guarantee that all methods of this class behave correctly with all possible
+    equivalence relations.
+    """
+
     def __init__(
         self,
-        original_network: SpongeNetwork,
-        quotient_nodes: Iterable[Iterable[Node]],
-    ) -> None: ...
+        original_sponge_network: SpongeNetwork,
+        quotient_nodes: Iterable[Iterable[SpongeNode]],
+    ) -> None:
+        self.original_sponge_network = original_sponge_network
+        quotient_properties = _QuotientProperties[SpongeNode](
+            original_sponge_network.resource_network._G, quotient_nodes
+        )
+        quotient_nodes_with_proper_sinks = self._gen_new_quotient_wrt_sink_nodes(
+            original_sponge_network, quotient_properties
+        )
+        self.quotient_network = QuotientNetwork(
+            original_sponge_network.resource_network, quotient_nodes_with_proper_sinks
+        )
+        quotient_upper_nodes = self._normalize_upper_nodes()
 
-    # def _reduce_vertices
+    @classmethod
+    def _gen_new_quotient_wrt_sink_nodes(
+        cls,
+        original_sponge_network: SpongeNetwork,
+        quotient_properties: _QuotientProperties[SpongeNode],
+    ) -> Iterable[Iterable[SpongeNode]]:
+        """
+        returns new quotient nodes
+        """
+        if len(original_sponge_network.sink_nodes) == 0:
+            return quotient_properties.quotient_nodes_sets
+
+        G = original_sponge_network.resource_network._G
+        sink_nodes = set(original_sponge_network.sink_nodes)
+        res: list[frozenset[SpongeNode]] = []
+
+        for nodeset in quotient_properties.quotient_nodes_sets:
+            new_equivalence_class: list[SpongeNode] = []
+            for node in nodeset:
+                for adjacent_node in G[node]:
+                    if adjacent_node in sink_nodes:
+                        new_equivalence_class.append(adjacent_node)
+            if not len(new_equivalence_class) == 0:
+                res.append(frozenset(new_equivalence_class))
+        return quotient_properties.quotient_nodes_sets | set(res)
+
+    def _normalize_upper_nodes(self) -> list[QuotientNode[SpongeNode]]:
+        qp = self.quotient_network.quotient_properties
+        new_upper_nodes: list[QuotientNode[SpongeNode]] = []
+        visited_nodesets: set[frozenset[SpongeNode]] = set()
+
+        for node in self.original_sponge_network.upper_nodes:
+            if node in qp.all_quotient_nodes:
+                respective_node_set = qp.quotient_entry[node]
+                if respective_node_set not in visited_nodesets:
+                    new_upper_nodes.append(respective_node_set)
+                    visited_nodesets.add(respective_node_set)
+            else:
+                new_upper_nodes.append(node)
+        return new_upper_nodes

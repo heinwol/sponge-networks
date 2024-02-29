@@ -350,7 +350,7 @@ class SimulationWithChangingWidthDrawable(
             for u, v, d in G.edges(data=True):
                 d["label"] = d["weight"]
             res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
-        return cast(list[SVG], res)
+        return res
 
 
 def display_svgs_interactively(
