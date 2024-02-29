@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC, abstractmethod
-from typing import Literal, final
+from typing import Generator, Literal, final
 import ipywidgets
 
 import networkx as nx
@@ -154,7 +154,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
     @abstractmethod
     def generate_weights_from_layout(self, grid: nx.DiGraph) -> nx.DiGraph: ...
 
-    def generate_sinks(self, grid: nx.DiGraph) -> nx.DiGraph:
+    def generate_sinks(self, grid: nx.DiGraph) -> tuple[nx.DiGraph, set[SpongeNode]]:
         grid = copy_graph(grid)
 
         def gen_pos(node: SpongeNode) -> tuple[float, float]:
@@ -166,6 +166,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
             return (x, y - self.visual_sink_edge_length)
 
         bottom_nodes = self.bottom_nodes()
+        sink_nodes: set[SpongeNode] = {(i, -1) for i in range(len(bottom_nodes))}
         grid.add_nodes_from(
             ((i, -1), {"pos": gen_pos(bottom_node)})
             for i, bottom_node in enumerate(bottom_nodes)
@@ -174,7 +175,7 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
             (bottom_node, (i, -1), {"weight": self.layout.weights_sink_edge})
             for i, bottom_node in enumerate(bottom_nodes)
         )
-        return grid
+        return grid, sink_nodes
 
     def generate_loops(self, grid: nx.DiGraph) -> nx.DiGraph:
         grid = copy_graph(grid)
@@ -191,17 +192,18 @@ class AbstractSpongeNetworkBuilder(ABC, Generic[LayoutT]):
         grid = self.generate_weights_from_layout(grid)
         grid = self.generate_loops(grid)
         if self.layout.generate_sinks:
-            grid = self.generate_sinks(grid)
+            grid, sink_nodes = self.generate_sinks(grid)
+        else:
+            sink_nodes: set[SpongeNode] = set()
         grid = self.final_grid_hook(grid)
 
         resource_network = ResourceNetworkGreedy[SpongeNode](grid)
 
         upper_nodes = self.upper_nodes()
-        bottom_nodes = self.bottom_nodes()
         return cls(
             resource_network=resource_network,
             upper_nodes=upper_nodes,
-            bottom_nodes=bottom_nodes,
+            sink_nodes=sink_nodes,
             built_with=self,
             builder_is_correct=True,
         )
@@ -212,7 +214,7 @@ class SpongeNetwork:
         self,
         resource_network: ResourceNetworkGreedy[SpongeNode],
         upper_nodes: list[SpongeNode],
-        bottom_nodes: Optional[list[SpongeNode]],
+        sink_nodes: set[SpongeNode],
         built_with: AbstractSpongeNetworkBuilder[LayoutT],
         builder_is_correct: bool,
     ) -> None:
@@ -222,12 +224,12 @@ class SpongeNetwork:
         """
         self.resource_network = resource_network
         self.upper_nodes = upper_nodes
-        self.bottom_nodes = bottom_nodes
+        self.sink_nodes = sink_nodes
         self.built_with = built_with
         self.builder_is_correct = builder_is_correct
 
     @classmethod
-    def build(cls, builder: AbstractSpongeNetworkBuilder) -> Self:
+    def build(cls, builder: AbstractSpongeNetworkBuilder[LayoutT]) -> Self:
         return builder.build(cls)
 
     def initial_state_processor(
@@ -246,7 +248,8 @@ class SpongeNetwork:
     def altered(
         self,
         callback: Callable[[nx.DiGraph], Optional[nx.DiGraph]],
-        new_upper_nodes: Optional[list[SpongeNode]] = None,
+        new_upper_nodes: Optional[Iterable[SpongeNode]] = None,
+        new_sink_nodes: Optional[Iterable[SpongeNode]] = None,
     ) -> Self:
         G = self.resource_network.G
         res = callback(G)
@@ -261,16 +264,19 @@ class SpongeNetwork:
             upper_nodes = list(new_upper_nodes)
         else:
             upper_nodes = [node for node in self.upper_nodes if node in G.nodes]
-        bottom_nodes = (
-            [node for node in self.bottom_nodes if node in G.nodes]
-            if self.bottom_nodes
-            else None
-        )
+
+        if new_sink_nodes:
+            sink_nodes = set(new_sink_nodes)
+        elif self.sink_nodes:
+            sink_nodes = {node for node in self.sink_nodes if node in G.nodes}
+        else:
+            sink_nodes = set()
+
         rn = type(self.resource_network)(G)
         return type(self)(
             resource_network=rn,
             upper_nodes=upper_nodes,
-            bottom_nodes=bottom_nodes,
+            sink_nodes=sink_nodes,
             built_with=self.built_with,
             builder_is_correct=False,
         )
