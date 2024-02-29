@@ -198,7 +198,7 @@ class QuotientNetwork(Generic[Node]):
     # ) -> StateArray[QuotientNode[Node]]:
 
 
-class QuotientSpongeNetwork:
+class QuotientSpongeNetwork(Generic[Node]):
     """
     Since the notion of a "Sponge Network" is too vague and the ability of the
     `SpongeNetwork` class to reflect is limited and sometimes faulty, no one can
@@ -208,53 +208,75 @@ class QuotientSpongeNetwork:
 
     def __init__(
         self,
-        original_sponge_network: SpongeNetwork,
-        quotient_nodes: Iterable[Iterable[SpongeNode]],
+        original_sponge_network: SpongeNetwork[Node],
+        quotient_nodes: Iterable[Iterable[Node]],
     ) -> None:
         self.original_sponge_network = original_sponge_network
-        quotient_properties = _QuotientProperties[SpongeNode](
+        quotient_properties = _QuotientProperties[Node](
             original_sponge_network.resource_network._G, quotient_nodes
         )
-        quotient_nodes_with_proper_sinks = self._gen_new_quotient_wrt_sink_nodes(
-            original_sponge_network, quotient_properties
+        new_sink_nodes = set(
+            self._gen_quotient_sink_nodes(original_sponge_network, quotient_properties)
         )
+        sink_nodes_classes: set[frozenset[Node]] = set(
+            filter(lambda qn: isinstance(qn, frozenset), new_sink_nodes)
+        )  # type: ignore
         self.quotient_network = QuotientNetwork(
-            original_sponge_network.resource_network, quotient_nodes_with_proper_sinks
+            original_sponge_network.resource_network,
+            quotient_properties.quotient_nodes_sets | sink_nodes_classes,
         )
-        quotient_upper_nodes = self._normalize_upper_nodes()
+        quotient_upper_nodes = self._normalize_upper_nodes(
+            original_sponge_network, self.quotient_network
+        )
+        # here we ignore the error saying "`ResourceNetworkGreedy` is
+        # incompatible with `ResourceNetwork`" since we *actually have*
+        # `ResourceNetworkGreedy`. Alas, since python's type system prohibits
+        # generic `TypeVar`s we couldn't make `QuotientNetwork` generic in
+        # `ResourceNetworkT[Node]`, so as soon as we make a quotient network
+        # we lose all the information about the concrete type of network
+        # (during static analysis only, of course)
+        self.quotient_sponge_network = SpongeNetwork(
+            resource_network=self.quotient_network.quotient_network,  # type: ignore
+            upper_nodes=quotient_upper_nodes,
+            sink_nodes=new_sink_nodes,
+            built_with=original_sponge_network.built_with,
+            builder_is_correct=False,
+        )
 
     @classmethod
-    def _gen_new_quotient_wrt_sink_nodes(
+    def _gen_quotient_sink_nodes(
         cls,
-        original_sponge_network: SpongeNetwork,
-        quotient_properties: _QuotientProperties[SpongeNode],
-    ) -> Iterable[Iterable[SpongeNode]]:
-        """
-        returns new quotient nodes
-        """
+        original_sponge_network: SpongeNetwork[Node],
+        quotient_properties: _QuotientProperties[Node],
+    ) -> frozenset[QuotientNode[Node]]:
         if len(original_sponge_network.sink_nodes) == 0:
-            return quotient_properties.quotient_nodes_sets
+            return frozenset(quotient_properties.quotient_nodes_sets)
 
         G = original_sponge_network.resource_network._G
         sink_nodes = set(original_sponge_network.sink_nodes)
-        res: list[frozenset[SpongeNode]] = []
+        res: list[frozenset[Node]] = []
 
         for nodeset in quotient_properties.quotient_nodes_sets:
-            new_equivalence_class: list[SpongeNode] = []
+            new_equivalence_class: list[Node] = []
             for node in nodeset:
                 for adjacent_node in G[node]:
                     if adjacent_node in sink_nodes:
                         new_equivalence_class.append(adjacent_node)
             if not len(new_equivalence_class) == 0:
                 res.append(frozenset(new_equivalence_class))
-        return quotient_properties.quotient_nodes_sets | set(res)
+        return frozenset(res)
 
-    def _normalize_upper_nodes(self) -> list[QuotientNode[SpongeNode]]:
-        qp = self.quotient_network.quotient_properties
-        new_upper_nodes: list[QuotientNode[SpongeNode]] = []
-        visited_nodesets: set[frozenset[SpongeNode]] = set()
+    @classmethod
+    def _normalize_upper_nodes(
+        cls,
+        original_sponge_network: SpongeNetwork[Node],
+        quotient_network: QuotientNetwork[Node],
+    ) -> list[QuotientNode[Node]]:
+        qp = quotient_network.quotient_properties
+        new_upper_nodes: list[QuotientNode[Node]] = []
+        visited_nodesets: set[frozenset[Node]] = set()
 
-        for node in self.original_sponge_network.upper_nodes:
+        for node in original_sponge_network.upper_nodes:
             if node in qp.all_quotient_nodes:
                 respective_node_set = qp.quotient_entry[node]
                 if respective_node_set not in visited_nodesets:
