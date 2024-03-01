@@ -32,7 +32,7 @@ import networkx as nx
 import numpy as np
 from copy import copy
 import toolz
-from sponge_networks.resource_networks import ResourceNetwork
+from sponge_networks.resource_networks import ResourceNetwork, ResourceNetworkWithIncome
 
 from sponge_networks.utils.utils import (
     K,
@@ -51,6 +51,7 @@ from sponge_networks.utils.utils import (
     StateArray,
     StateArraySlice,
     all_equals,
+    check_cast,
     const,
     const_iter,
     copy_graph,
@@ -60,7 +61,11 @@ from sponge_networks.utils.utils import (
     parallelize_range,
     set_object_property_nested,
 )
-from sponge_networks.sponge_networks import SpongeNetwork, SpongeNode
+from sponge_networks.sponge_networks import (
+    ResourceNetworkGreedy,
+    SpongeNetwork,
+    SpongeNode,
+)
 
 __all__ = ["QuotientNode", "QuotientNetwork"]
 
@@ -236,7 +241,10 @@ class QuotientSpongeNetwork(Generic[Node]):
         # we lose all the information about the concrete type of network
         # (during static analysis only, of course)
         self.quotient_sponge_network = SpongeNetwork(
-            resource_network=self.quotient_network.quotient_network,  # type: ignore
+            resource_network=check_cast(
+                ResourceNetworkGreedy[QuotientNode[Node]],
+                self.quotient_network.quotient_network,
+            ),
             upper_nodes=quotient_upper_nodes,
             sink_nodes=new_sink_nodes,
             built_with=original_sponge_network.built_with,

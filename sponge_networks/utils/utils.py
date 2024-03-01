@@ -118,6 +118,15 @@ def flatten(x: Iterable[Iterable[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(x))
 
 
+def check_cast(tp: type[T], val: Any) -> T:
+    if type(val) is tp:
+        return cast(T, val)
+    else:
+        raise TypeError(
+            f"object `{val}` has type `{type(val)}`, while an attempt to cast it to `{tp}` was made"
+        )
+
+
 def all_equals(
     elements: Sequence[T], eq: Callable[[T, T], bool] = lambda x, y: x == y
 ) -> bool:
