@@ -56,6 +56,7 @@ from sponge_networks.utils.utils import (
     const_iter,
     copy_graph,
     flatten,
+    inv_dict,
     linear_func_from_2_points,
     merge_dicts_with_policy,
     parallelize_range,
@@ -70,6 +71,10 @@ from sponge_networks.sponge_networks import (
 __all__ = ["QuotientNode", "QuotientNetwork"]
 
 QuotientNode: TypeAlias = Node | frozenset[Node]
+
+
+def _flatten_single_element_set(s: frozenset[T]) -> T | frozenset[T]:
+    return next(iter(s)) if len(s) == 1 else s
 
 
 class _QuotientProperties(Generic[Node]):
@@ -122,9 +127,11 @@ class QuotientNetwork(Generic[Node]):
             original_network._G, quotient_nodes
         )
 
-        self.quotient_network: ResourceNetwork[Node] = type(original_network)(
+        self.quotient_network: ResourceNetwork[QuotientNode[Node]] = type(
+            original_network
+        )(
             self.generate_quotient_graph()
-        )
+        )  # type: ignore
 
     @classmethod
     def _nodes_merge_policy(cls, key: Any, xs: list[T]) -> T | Empty:
@@ -198,6 +205,39 @@ class QuotientNetwork(Generic[Node]):
         G_q.add_edges_from((u, v, d) for (u, v), d in edges_to_add.items())
         return G_q
 
+    def convert_simulation(
+        self, quotient_sim: StateArray[QuotientNode[Node]]
+    ) -> StateArray[Node]:
+        """
+        This function converts the result of `self.quotient_network.run_simulation`
+        to a fake simulation of the original network, where states of nodes of
+        the same equivalence class are just identical
+
+        Needed primarily for display purposes
+        """
+        qe = self.quotient_properties.quotient_entry
+        quotient_node_descriptor = self.quotient_network.node_descriptor
+
+        new_node_descriptor = self.original_network.node_descriptor
+        new_idx_descriptor = self.original_network.idx_descriptor
+
+        new_indicies = [
+            quotient_node_descriptor[_flatten_single_element_set(qe[node])]
+            for node in new_node_descriptor
+        ]
+
+        total_output_res = quotient_sim.total_output_res[new_indicies]
+        states_arr = quotient_sim.states_arr[:, new_indicies]
+        flow_arr = quotient_sim.flow_arr[:, new_indicies, :]
+        flow_arr = flow_arr[:, :, new_indicies]
+        return StateArray[Node](
+            node_descriptor=new_node_descriptor,
+            idx_descriptor=new_idx_descriptor,
+            states_arr=states_arr,
+            flow_arr=flow_arr,
+            total_output_res=total_output_res,
+        )
+
     # def run_simulation(
     #     self, initial_state: dict[QuotientNode[Node], float] | list[float], n_iters: int = 30
     # ) -> StateArray[QuotientNode[Node]]:
@@ -224,7 +264,9 @@ class QuotientSpongeNetwork(Generic[Node]):
             self._gen_quotient_sink_nodes(original_sponge_network, quotient_properties)
         )
         sink_nodes_classes: set[frozenset[Node]] = set(
-            filter(lambda qn: isinstance(qn, frozenset), new_sink_nodes)
+            filter(
+                lambda qn: isinstance(qn, frozenset), new_sink_nodes
+            )  # TODO not a good conversion actually
         )  # type: ignore
         self.quotient_network = QuotientNetwork(
             original_sponge_network.resource_network,
