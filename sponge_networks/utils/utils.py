@@ -127,6 +127,10 @@ def check_cast(tp: type[T], val: Any) -> T:
         )
 
 
+def inv_dict(d: dict[K, V]) -> dict[V, K]:
+    return {v: k for k, v in d.items()}
+
+
 def all_equals(
     elements: Sequence[T], eq: Callable[[T, T], bool] = lambda x, y: x == y
 ) -> bool:
@@ -261,11 +265,13 @@ class SimpleNodeArrayDescriptor(Generic[Node, ValT]):
         new_key: list[int] = [0] * len(key_)
         for i in range(len(key_)):
             if i in self.dims_affected:
-                new_key[i] = (  # type: ignore
+                new_key[i] = (
                     self.val_descriptor[key_[i]]
                     if key_[i] in self.val_descriptor
-                    else key_[i]
+                    else check_cast(int, key_[i])
                 )
+            else:
+                new_key[i] = check_cast(int, key_[i])
         new_key_t = tuple(new_key)
         return self.arr[new_key_t if len(new_key_t) != 1 else new_key_t[0]]
 
@@ -278,6 +284,9 @@ class StateArraySlice(TypedDict, Generic[Node]):
 
 @dataclass
 class StateArray(Generic[Node]):
+    # here:
+    # - N -- time steps
+    # - M -- number of vertices
     node_descriptor: dict[Node, int]
     idx_descriptor: TypedMapping[int, Node]
     states_arr: NDArrayT[AnyFloat]  # N x M
