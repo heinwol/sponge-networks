@@ -21,6 +21,7 @@ from typing import (
     TypedDict,
     TypeVar,
     cast,
+    get_origin,
     overload,
 )
 
@@ -119,7 +120,7 @@ def flatten(x: Iterable[Iterable[T]]) -> list[T]:
 
 
 def check_cast(tp: type[T], val: Any) -> T:
-    if type(val) is tp:
+    if type(val) in [tp, get_origin(tp)]:
         return cast(T, val)
     else:
         raise TypeError(

@@ -8,9 +8,10 @@ original graph.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import reduce
-from itertools import product
 import operator
-from pydoc import classname
+from IPython.core.display import SVG
+from expression import compose
+import ipywidgets
 from typing import (
     Any,
     Callable,
@@ -28,11 +29,15 @@ from typing import (
     TypeVar,
     final,
 )
+import warnings
 import networkx as nx
 import numpy as np
 from copy import copy
-import toolz
-from sponge_networks.resource_networks import ResourceNetwork, ResourceNetworkWithIncome
+from sponge_networks.display import (
+    SimulationWithChangingWidthDrawable,
+    display_svgs_interactively,
+)
+from sponge_networks.resource_networks import ResourceNetwork
 
 from sponge_networks.utils.utils import (
     K,
@@ -65,10 +70,18 @@ from sponge_networks.utils.utils import (
 from sponge_networks.sponge_networks import (
     ResourceNetworkGreedy,
     SpongeNetwork,
+    SpongeNetwork2dBuilder,
+    SpongeNetworkHexagonalBuilder,
+    SpongeNetworkTriangularBuilder,
     SpongeNode,
 )
 
-__all__ = ["QuotientNode", "QuotientNetwork"]
+__all__ = [
+    "QuotientNode",
+    "QuotientNetwork",
+    "QuotientSpongeNetwork",
+    "quotient_sponge_network_on_cylinder",
+]
 
 QuotientNode: TypeAlias = Node | frozenset[Node]
 
@@ -335,3 +348,81 @@ class QuotientSpongeNetwork(Generic[Node]):
             else:
                 new_upper_nodes.append(node)
         return new_upper_nodes
+
+    def plot_with_states(
+        self,
+        states: StateArray[QuotientNode[Node]],
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        scale: Optional[float] = None,
+        max_node_width: Optional[float] = None,
+    ) -> list[SVG]:
+        sim_conv = self.quotient_network.convert_simulation(states)
+        quotient_nodes_sets = (
+            self.quotient_network.quotient_properties.quotient_nodes_sets
+        )
+
+        def color_node_borders(G: nx.DiGraph) -> None:
+            for nodeset in quotient_nodes_sets:
+                for node in nodeset:
+                    G.nodes[node]["color"] = "red"
+                    G.nodes[node]["penwidth"] = 2 * (scale or 1.0)
+            if prop_setter:
+                prop_setter(G)
+
+        return SimulationWithChangingWidthDrawable.new(
+            self.quotient_network.original_network._G,
+            sim=sim_conv,
+            scale=scale,
+            max_node_width=max_node_width,
+        ).plot(prop_setter=color_node_borders)
+
+    def plot_simulation(
+        self,
+        sim: StateArray[QuotientNode[Node]],
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        scale: float = 1.0,
+    ) -> ipywidgets.interactive:
+        pl = self.plot_with_states(
+            sim,
+            prop_setter=prop_setter,
+            scale=scale,
+        )
+        return display_svgs_interactively(pl)
+
+
+# class CylinderPlacement(ABC, Generic[Node]):
+#     @abstractmethod
+#     @staticmethod
+#     def make_quotient(sn: SpongeNetwork[Node]) -> Iterable[Iterable[Node]]: ...
+
+
+def quotient_sponge_network_on_cylinder(
+    sn: SpongeNetwork[SpongeNode],
+) -> QuotientSpongeNetwork[SpongeNode]:
+    if not sn.builder_is_correct:
+        warnings.warn(f"Inconsistent builder for {sn}, result can be incorrect")
+    builder = sn.built_with
+    n_cols, n_rows = builder.n_cols, builder.n_rows
+    quotient_nodes: list[frozenset[SpongeNode]] = []
+
+    if isinstance(builder, SpongeNetwork2dBuilder):
+        quotient_nodes = [frozenset({(0, y), (n_cols, y)}) for y in range(n_rows + 1)]
+    elif isinstance(builder, SpongeNetworkTriangularBuilder):
+        if n_cols % 2:
+            raise ValueError(
+                "Triangular grid must have even amount of columns to be glued on a cylinder"
+            )
+        quotient_nodes = [
+            frozenset({(0, y), (n_cols // 2, y)}) for y in range(n_rows + 1)
+        ]
+    elif isinstance(builder, SpongeNetworkHexagonalBuilder):
+        if n_cols % 2:
+            raise ValueError(
+                "Hexagonal grid must have even amount of columns to be glued on a cylinder"
+            )
+        quotient_nodes = [
+            frozenset({(0, y), (n_cols, y)}) for y in range(1, 2 * n_rows + 1)
+        ]
+    else:
+        raise ValueError(f"Unknown network builder type: {type(builder)}")
+    return QuotientSpongeNetwork(sn, quotient_nodes)

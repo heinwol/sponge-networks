@@ -25,9 +25,10 @@ import networkx as nx
 import numpy as np
 import returns
 from toolz import valmap
-
+import cairosvg
 from IPython.core.display import SVG
 from IPython.display import display
+from PIL import Image
 from ipywidgets import widgets
 
 from svgpathtools import svg2paths2
@@ -42,6 +43,7 @@ from sponge_networks.utils.utils import (
     Node,
     StateArray,
     StateArraySlice,
+    check_cast,
     const,
     const_iter,
     copy_graph,
@@ -301,13 +303,13 @@ class SimulationWithChangingWidthDrawable(
             priority="right",
         )
 
-        if prop_setter is not None:
-            prop_setter(G)
-
         for u, v in G.edges:
             weight = self.original_graph.edges[u, v]["weight"]
             G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
             G.edges[u, v]["penwidth"] = calc_edge_width(weight)
+
+        if prop_setter is not None:
+            prop_setter(G)
 
         _add_void_nodes(G, max_node_width, scale)
 
@@ -331,24 +333,28 @@ class SimulationWithChangingWidthDrawable(
             for v in G.nodes:
                 v = cast(Node, v)
                 if "color" not in G.nodes[v] or G.nodes[v]["color"] != "transparent":
-                    G.nodes[v]["label"] = (
-                        _format_vertex_resource_for_simulation_display(
-                            cast(AnyFloat, state["states"][[v]])
-                        )
+                    set_object_property_nested(
+                        G.nodes[v],
+                        {
+                            "label": _format_vertex_resource_for_simulation_display(
+                                cast(AnyFloat, state["states"][[v]])
+                            ),
+                            "width": calc_node_width(cast(float, state["states"][[v]])),
+                            "fillcolor": (
+                                "#f0fff4"
+                                if (
+                                    state["states"][[v]] < state["total_output_res"][[v]]  # type: ignore
+                                    and not np.isclose(
+                                        state["total_output_res"][[v]], 0
+                                    )
+                                )
+                                else "#b48ead"
+                            ),
+                        },
+                        "right",
                     )
-                    G.nodes[v]["width"] = calc_node_width(cast(float, state["states"][[v]]))  # type: ignore
-
-                    G.nodes[v]["fillcolor"] = (
-                        "#f0fff4"
-                        if (
-                            state["states"][[v]] < state["total_output_res"][[v]]  # type: ignore
-                            and not np.isclose(state["total_output_res"][[v]], 0)
-                        )
-                        else "#b48ead"
-                    )
-
-            for u, v, d in G.edges(data=True):
-                d["label"] = d["weight"]
+            # for u, v, d in G.edges(data=True):
+            #     d["label"] = d["weight"]
             res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
         return res
 
@@ -384,3 +390,24 @@ def display_svgs_interactively(
         # interactive_plot.children[-1].layout.width = str(max_width + 2) + width_metrics  # type: ignore
     finally:
         return interactive_plot
+
+
+def svgs_to_gif(svgs: list[SVG], fp: str) -> None:
+    images = [
+        Image.open(
+            io.BytesIO(check_cast(bytes, cairosvg.svg2png(bytestring=svg.data))),
+            formats=["png"],
+        )
+        for svg in svgs
+    ]
+
+    with open(fp, "wb") as gif:
+        images[0].save(
+            gif,
+            format="gif",
+            save_all=True,
+            append_images=images[1:],
+            optimize=False,
+            duration=800,
+            loop=0,
+        )
