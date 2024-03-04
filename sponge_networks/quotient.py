@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import reduce
 import operator
+from re import L
 from IPython.core.display import SVG
 from expression import compose
 import ipywidgets
@@ -17,6 +18,7 @@ from typing import (
     Callable,
     Generic,
     Iterable,
+    Iterator,
     Literal,
     Optional,
     Protocol,
@@ -127,6 +129,13 @@ class _QuotientProperties(Generic[Node]):
             raise ValueError("some unknown vertices encountered")
         if len(set(all_quotient_nodes_)) != len(all_quotient_nodes_):
             raise ValueError("repeated vertices encountered")
+
+    def cast_to_set(self, node_or_set: QuotientNode[Node]) -> frozenset[Node]:
+        return (
+            node_or_set
+            if node_or_set in self.quotient_nodes_sets
+            else frozenset({node_or_set})
+        )  # type: ignore
 
 
 class QuotientNetwork(Generic[Node]):
@@ -251,9 +260,63 @@ class QuotientNetwork(Generic[Node]):
             total_output_res=total_output_res,
         )
 
-    # def run_simulation(
-    #     self, initial_state: dict[QuotientNode[Node], float] | list[float], n_iters: int = 30
-    # ) -> StateArray[QuotientNode[Node]]:
+    def _get_all_edges_by_quotient_edge(
+        self, n1: Iterable[Node], n2: Iterable[Node]
+    ) -> Iterator[Pair[Node]]:
+        return (
+            (u, v) for v in n2 for u in n1 if (u, v) in self.original_network._G.edges
+        )
+
+    def plot_with_states(
+        self,
+        states: StateArray[QuotientNode[Node]],
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        scale: Optional[float] = None,
+        max_node_width: Optional[float] = None,
+    ) -> list[SVG]:
+        sim_conv = self.convert_simulation(states)
+        qp = self.quotient_properties
+        G_q = self.quotient_network._G
+
+        def color_node_borders(G: nx.DiGraph) -> None:
+            def set_edges_weight(edges: Iterable[Pair[Node]], weight: float) -> None:
+                for e in edges:
+                    G.edges[e]["label"] = weight
+
+            for nodeset in qp.quotient_nodes_sets:
+                for node in nodeset:
+                    G.nodes[node]["color"] = "red"
+                    G.nodes[node]["penwidth"] = 2 * (scale or 1.0)
+
+            for n1, n2, d in G_q.edges(data=True):
+                set_edges_weight(
+                    self._get_all_edges_by_quotient_edge(
+                        qp.cast_to_set(n1), qp.cast_to_set(n2)
+                    ),
+                    d["weight"],
+                )
+            if prop_setter:
+                prop_setter(G)
+
+        return SimulationWithChangingWidthDrawable.new(
+            self.original_network._G,
+            sim=sim_conv,
+            scale=scale,
+            max_node_width=max_node_width,
+        ).plot(prop_setter=color_node_borders)
+
+    def plot_simulation(
+        self,
+        sim: StateArray[QuotientNode[Node]],
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        scale: float = 1.0,
+    ) -> ipywidgets.interactive:
+        pl = self.plot_with_states(
+            sim,
+            prop_setter=prop_setter,
+            scale=scale,
+        )
+        return display_svgs_interactively(pl)
 
 
 class QuotientSpongeNetwork(Generic[Node]):
@@ -325,7 +388,7 @@ class QuotientSpongeNetwork(Generic[Node]):
                 for adjacent_node in G[node]:
                     if adjacent_node in sink_nodes:
                         new_equivalence_class.append(adjacent_node)
-            if not len(new_equivalence_class) == 0:
+            if not len(new_equivalence_class) < 2:
                 res.append(frozenset(new_equivalence_class))
         return frozenset(res)
 
@@ -348,46 +411,6 @@ class QuotientSpongeNetwork(Generic[Node]):
             else:
                 new_upper_nodes.append(node)
         return new_upper_nodes
-
-    def plot_with_states(
-        self,
-        states: StateArray[QuotientNode[Node]],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-        scale: Optional[float] = None,
-        max_node_width: Optional[float] = None,
-    ) -> list[SVG]:
-        sim_conv = self.quotient_network.convert_simulation(states)
-        quotient_nodes_sets = (
-            self.quotient_network.quotient_properties.quotient_nodes_sets
-        )
-
-        def color_node_borders(G: nx.DiGraph) -> None:
-            for nodeset in quotient_nodes_sets:
-                for node in nodeset:
-                    G.nodes[node]["color"] = "red"
-                    G.nodes[node]["penwidth"] = 2 * (scale or 1.0)
-            if prop_setter:
-                prop_setter(G)
-
-        return SimulationWithChangingWidthDrawable.new(
-            self.quotient_network.original_network._G,
-            sim=sim_conv,
-            scale=scale,
-            max_node_width=max_node_width,
-        ).plot(prop_setter=color_node_borders)
-
-    def plot_simulation(
-        self,
-        sim: StateArray[QuotientNode[Node]],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-        scale: float = 1.0,
-    ) -> ipywidgets.interactive:
-        pl = self.plot_with_states(
-            sim,
-            prop_setter=prop_setter,
-            scale=scale,
-        )
-        return display_svgs_interactively(pl)
 
 
 # class CylinderPlacement(ABC, Generic[Node]):
