@@ -216,8 +216,12 @@ class ResourceNetwork(Generic[Node]):
             self._G, sim=states, scale=scale, max_node_width=max_node_width
         ).plot(prop_setter=prop_setter)
 
-    def plot(self, scale: float = 1.7) -> SVG:
-        return JustDrawable.new(self._G).plot(scale=scale)
+    def plot(
+        self,
+        scale: float = 1.7,
+        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+    ) -> SVG:
+        return JustDrawable.new(self._G).plot(scale, prop_setter)
 
     def plot_simulation(
         self,

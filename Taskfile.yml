@@ -1,21 +1,22 @@
 # https://taskfile.dev
 
-version: '3'
+version: "3"
 
 vars:
-  # GREETING: Hello, World!
-  # WORKDIR: $PWD
+  PROFILE_FOLDER: .nix-env
+# GREETING: Hello, World!
+# WORKDIR: $PWD
 
 tasks:
   profile-build:
     cmds:
-      - nix build .#devEnv --out-link .nix-env
+      - rm -rf {{.PROFILE_FOLDER}}
+      - nix build .#devEnv --out-link {{.PROFILE_FOLDER}}
     sources:
       - flake.nix
       - flake.lock
       - poetry.lock
       - pyproject.toml
     generates:
-      - .nix-env
-
+      - "{{.PROFILE_FOLDER}}"
 # --exclude ".git/**"

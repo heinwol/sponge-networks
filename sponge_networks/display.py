@@ -182,7 +182,9 @@ class JustDrawable(DrawableGraphWithContext[None]):
     def new(cls, G: nx.DiGraph) -> Self:
         return cls(G, None)
 
-    def plot(self, scale: float) -> SVG:
+    def plot(
+        self, scale: float, prop_setter: Optional[Callable[[nx.DiGraph], None]] = None
+    ) -> SVG:
         G_d = self.drawing_graph
 
         set_object_property_nested(
@@ -199,7 +201,8 @@ class JustDrawable(DrawableGraphWithContext[None]):
 
         for u, v in G_d.edges:
             G_d.edges[u, v]["label"] = G_d.edges[u, v]["weight"]
-
+        if prop_setter:
+            prop_setter(G_d)
         return SVG(nx.nx_pydot.to_pydot(G_d).create_svg())
 
 
