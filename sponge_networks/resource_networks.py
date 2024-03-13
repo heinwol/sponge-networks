@@ -10,6 +10,9 @@ from ipywidgets import widgets
 from scipy.sparse.linalg import eigs as sparce_eigs
 
 from sponge_networks.display import (
+    MaybeDrawablePropertySetterOrFn,
+    JustDrawableContext,
+    SimulationWithChangingWidthContext,
     SimulationWithChangingWidthDrawable,
     display_svgs_interactively,
     JustDrawable,
@@ -208,25 +211,37 @@ class ResourceNetwork(Generic[Node]):
     def plot_with_states(
         self,
         states: StateArray[Node],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: Optional[
+            MaybeDrawablePropertySetterOrFn[SimulationWithChangingWidthContext]
+        ] = None,
         scale: Optional[float] = None,
         max_node_width: Optional[float] = None,
     ) -> list[SVG]:
-        return SimulationWithChangingWidthDrawable.new(
-            self._G, sim=states, scale=scale, max_node_width=max_node_width
-        ).plot(prop_setter=prop_setter)
+        return (
+            SimulationWithChangingWidthDrawable.new(
+                self._G, sim=states, scale=scale, max_node_width=max_node_width
+            )
+            .compose_property_setter(prop_setter)
+            .plot()
+        )
 
     def plot(
         self,
         scale: float = 1.7,
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: Optional[
+            MaybeDrawablePropertySetterOrFn[JustDrawableContext]
+        ] = None,
     ) -> SVG:
-        return JustDrawable.new(self._G).plot(scale, prop_setter)
+        return (
+            JustDrawable.new(self._G, scale).compose_property_setter(prop_setter).plot()
+        )
 
     def plot_simulation(
         self,
         simulation: StateArray[Node],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: Optional[
+            MaybeDrawablePropertySetterOrFn[SimulationWithChangingWidthContext]
+        ] = None,
         scale: Optional[float] = None,
     ) -> widgets.interactive:
         pl = self.plot_with_states(

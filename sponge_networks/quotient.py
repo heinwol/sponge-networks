@@ -30,15 +30,22 @@ from typing import (
     cast,
     TypeVar,
     final,
+    # override,
 )
 import warnings
 import networkx as nx
+from networkx import DiGraph
 import numpy as np
 from copy import copy
 from sponge_networks.display import (
+    DrawableGraphWithContext,
+    MaybeDrawablePropertySetterOrFn,
     JustDrawable,
+    JustDrawableContext,
+    SimulationWithChangingWidthContext,
     SimulationWithChangingWidthDrawable,
     display_svgs_interactively,
+    _ContextT,
 )
 from sponge_networks.resource_networks import ResourceNetwork
 
@@ -269,65 +276,71 @@ class QuotientNetwork(Generic[Node]):
         )
 
     def _plot_helper(
-        self,
-        scale: Optional[float] = None,
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
-    ) -> Callable[[nx.DiGraph], None]:
+        self, drawable: JustDrawable | SimulationWithChangingWidthDrawable
+    ) -> JustDrawable | SimulationWithChangingWidthDrawable:
         qp = self.quotient_properties
         G_q = self.quotient_network._G
+        scale = drawable.display_context.scale
 
         def inner(G: nx.DiGraph) -> None:
-            def set_edges_weight(edges: Iterable[Pair[Node]], weight: float) -> None:
+
+            def set_edges_props(edges: Iterable[Pair[Node]], weight: float) -> None:
                 for e in edges:
                     G.edges[e]["label"] = weight
-                    # TODO fix width somehow
-                    # G.edges[e]["penwidth"] = 2.5 * (scale or 1.0)
+                    if isinstance(drawable, SimulationWithChangingWidthDrawable):
+                        G.edges[e]["penwidth"] = drawable.calc_edge_width(weight)
 
             for nodeset in qp.quotient_nodes_sets:
                 for node in nodeset:
                     G.nodes[node]["color"] = "red"
-                    G.nodes[node]["penwidth"] = 2 * (scale or 1.0)
+                    G.nodes[node]["penwidth"] = 2 * scale
 
             for n1, n2, d in G_q.edges(data=True):
-                set_edges_weight(
+                set_edges_props(
                     self._get_all_edges_by_quotient_edge(
                         qp.cast_to_set(n1), qp.cast_to_set(n2)
                     ),
                     d["weight"],
                 )
-            if prop_setter:
-                prop_setter(G)
 
-        return inner
+        return drawable.compose_property_setter(inner)
 
     def plot(
         self,
         scale: float = 1.7,
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: Optional[
+            MaybeDrawablePropertySetterOrFn[JustDrawableContext]
+        ] = None,
     ) -> SVG:
-        return JustDrawable.new(self.original_network._G).plot(
-            scale, prop_setter=self._plot_helper(scale, prop_setter)
-        )
+        drawable = JustDrawable.new(self.original_network._G, scale)
+        drawable = drawable.compose_property_setter(self._plot_helper(drawable))
+        return drawable.compose_property_setter(prop_setter).plot()
 
     def plot_with_states(
         self,
         states: StateArray[QuotientNode[Node]],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: MaybeDrawablePropertySetterOrFn[
+            SimulationWithChangingWidthContext
+        ] = None,
         scale: Optional[float] = None,
         max_node_width: Optional[float] = None,
     ) -> list[SVG]:
         sim_conv = self.convert_simulation(states)
-        return SimulationWithChangingWidthDrawable.new(
+        drawable = SimulationWithChangingWidthDrawable.new(
             self.original_network._G,
             sim=sim_conv,
             scale=scale,
             max_node_width=max_node_width,
-        ).plot(prop_setter=self._plot_helper(scale, prop_setter))
+        )
+        drawable = drawable.compose_property_setter(self._plot_helper(drawable))
+        return drawable.compose_property_setter(prop_setter).plot()
 
     def plot_simulation(
         self,
         sim: StateArray[QuotientNode[Node]],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: Optional[
+            MaybeDrawablePropertySetterOrFn[SimulationWithChangingWidthContext]
+        ] = None,
         scale: float = 1.0,
     ) -> ipywidgets.interactive:
         pl = self.plot_with_states(

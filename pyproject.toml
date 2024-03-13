@@ -28,6 +28,7 @@ returns = "^0.22.0"
 expression = "^5.0.2"
 svgpathtools = "^1.6.1"
 cairosvg = "^2.7.1"
+dill = "^0.3.8"
 
 
 [tool.poetry.group.dev.dependencies]

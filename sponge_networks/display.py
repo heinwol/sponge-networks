@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+import copy
+
 from dataclasses import dataclass, field
-import multiprocessing
 import os
 import io
 import re
@@ -23,7 +24,7 @@ from typing import (
 )
 import networkx as nx
 import numpy as np
-import returns
+from returns.primitives.hkt import Kind1
 from toolz import valmap
 import cairosvg
 from IPython.core.display import SVG
@@ -47,23 +48,29 @@ from sponge_networks.utils.utils import (
     const,
     const_iter,
     copy_graph,
+    do_multiple,
     flatten,
     linear_func_from_2_points,
     parallelize_range,
     set_object_property_nested,
 )
+import dill, multiprocessing
 
-# _GraphProps = TypeVar("_GraphProps", bound=Any, contravariant=True)
+# see https://stackoverflow.com/a/69253561/10240583
+dill.Pickler.dumps, dill.Pickler.loads = dill.dumps, dill.loads  # type: ignore
+multiprocessing.reduction.ForkingPickler = dill.Pickler  # type: ignore
+multiprocessing.reduction.dump = dill.dump  # type: ignore
 
-# _GraphProps = TypeVarTuple("_GraphProps")
-# _G_Weight: TypeAlias = Literal["weight"]
-# _G_Pos: TypeAlias = Literal["pos"]
-
-
-# class DiGraphWithProps(nx.DiGraph, Generic[*_GraphProps]): ...
-
-
-# x = DiGraphWithProps[_G_Pos]
+__all__ = [
+    "DrawableGraphWithContext",
+    "MaybeDrawablePropertySetterOrFn",
+    "JustDrawable",
+    "SimulationContext",
+    "SimulationWithChangingWidthContext",
+    "SimulationWithChangingWidthDrawable",
+    "display_svgs_interactively",
+    "svgs_to_gif",
+]
 
 
 def _parse_svg_distance_attribute(attr: str) -> tuple[int, str]:
@@ -155,8 +162,11 @@ def _add_void_nodes(G: nx.DiGraph, node_width: float, scale: float) -> None:
     G.add_edges_from(void_edges)
 
 
+_ContextT = TypeVar("_ContextT", bound=Any)
+
+
 @dataclass
-class DrawableGraphWithContext(Generic[T]):
+class DrawableGraphWithContext(Generic[_ContextT]):
     """
     Here `original_graph` is the graph we want to be displayed,
     it should not be modified in any way (copy if needed)
@@ -169,24 +179,50 @@ class DrawableGraphWithContext(Generic[T]):
     """
 
     original_graph: nx.DiGraph
-    display_context: T
+    display_context: _ContextT
     drawing_graph: nx.DiGraph = field(init=False)
 
     def __post_init__(self) -> None:
         self.drawing_graph = copy_graph(self.original_graph)
 
+    def property_setter(self) -> None: ...
+
+    def compose_property_setter(
+        self, x: "DrawableGraphWithContext[Any]" | Callable[[nx.DiGraph], None] | None
+    ) -> Self:
+        if not x:
+            return self
+        if isinstance(x, type(self)):
+            assert x.drawing_graph is self.drawing_graph
+            self.property_setter = do_multiple(self.property_setter, x.property_setter)
+            return self
+        if isinstance(x, Callable):
+            self.property_setter = do_multiple(
+                self.property_setter, lambda: x(self.drawing_graph)
+            )
+            return self
+        raise ValueError(f"invalid parameter: {x}")
+
+
+MaybeDrawablePropertySetterOrFn: TypeAlias = (
+    Callable[[nx.DiGraph], None] | DrawableGraphWithContext[_ContextT] | None
+)
+
 
 @dataclass
-class JustDrawable(DrawableGraphWithContext[None]):
+class JustDrawableContext:
+    scale: float = 1.0
+
+
+@dataclass
+class JustDrawable(DrawableGraphWithContext[JustDrawableContext]):
     @classmethod
-    def new(cls, G: nx.DiGraph) -> Self:
-        return cls(G, None)
+    def new(cls, G: nx.DiGraph, scale: Optional[float]) -> Self:
+        return cls(G, JustDrawableContext(scale or JustDrawableContext.scale))
 
-    def plot(
-        self, scale: float, prop_setter: Optional[Callable[[nx.DiGraph], None]] = None
-    ) -> SVG:
+    def plot(self) -> SVG:
         G_d = self.drawing_graph
-
+        scale = self.display_context.scale
         set_object_property_nested(
             G_d.graph,
             {
@@ -201,8 +237,9 @@ class JustDrawable(DrawableGraphWithContext[None]):
 
         for u, v in G_d.edges:
             G_d.edges[u, v]["label"] = G_d.edges[u, v]["weight"]
-        if prop_setter:
-            prop_setter(G_d)
+
+        self.property_setter()
+
         return SVG(nx.nx_pydot.to_pydot(G_d).create_svg())
 
 
@@ -248,6 +285,32 @@ class SimulationWithChangingWidthContext(Generic[Node], SimulationContext[Node])
 class SimulationWithChangingWidthDrawable(
     Generic[Node], DrawableGraphWithContext[SimulationWithChangingWidthContext[Node]]
 ):
+    total_sum: float = field(init=False)
+    min_weight: float = field(init=False)
+    max_weight: float = field(init=False)
+    calc_edge_width: Callable[[float], float] = field(init=False)
+    calc_node_width: Callable[[float], float] = field(init=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        G = self.drawing_graph
+        scale = self.display_context.scale
+        self.total_sum = self.display_context.sim[0]["states"].arr.sum()
+        self.min_weight = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
+        self.max_weight = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
+        self.calc_edge_width = (
+            const(2.5 * scale)
+            if np.allclose(self.max_weight, self.min_weight)
+            else linear_func_from_2_points(
+                (self.min_weight, 0.6 * scale), (self.max_weight, 4 * scale)
+            )
+        )
+        self.calc_node_width = (
+            linear_func_from_2_points((0, 0.3 * scale), (self.total_sum, 1.0 * scale))
+            if self.total_sum > 0
+            else const(0.3 * scale)
+        )
+
     @classmethod
     def new(
         cls,
@@ -267,21 +330,10 @@ class SimulationWithChangingWidthDrawable(
             ),
         )
 
-    def plot(
-        self, prop_setter: Optional[Callable[[nx.DiGraph], None]] = None
-    ) -> list[SVG]:
+    def plot(self) -> list[SVG]:
         G = self.drawing_graph
         scale = self.display_context.scale
         max_node_width = self.display_context.max_node_width
-
-        max_weight: float = max(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        min_weight: float = min(map(lambda x: x[2]["weight"], G.edges(data=True)))
-        if np.allclose(max_weight, min_weight):
-            calc_edge_width: Callable[[float], float] = lambda x: 2.5 * scale
-        else:
-            calc_edge_width = linear_func_from_2_points(
-                (min_weight, 0.6 * scale), (max_weight, 4 * scale)
-            )
 
         _ensure_graph_layout(G)
 
@@ -309,10 +361,9 @@ class SimulationWithChangingWidthDrawable(
         for u, v in G.edges:
             weight = self.original_graph.edges[u, v]["weight"]
             G.edges[u, v]["label"] = f"<<B>{weight}</B>>"
-            G.edges[u, v]["penwidth"] = calc_edge_width(weight)
+            G.edges[u, v]["penwidth"] = self.calc_edge_width(weight)
 
-        if prop_setter is not None:
-            prop_setter(G)
+        self.property_setter()
 
         _add_void_nodes(G, max_node_width, scale)
 
@@ -323,14 +374,7 @@ class SimulationWithChangingWidthDrawable(
 
     def _plot_batches(self, states: list[StateArraySlice[Node]]) -> list[SVG]:
         G = self.drawing_graph
-        scale = self.display_context.scale
-
-        total_sum: float = states[0]["states"].arr.sum()
-        calc_node_width = (
-            linear_func_from_2_points((0, 0.3 * scale), (total_sum, 1.0 * scale))
-            if total_sum > 0
-            else const(0.3 * scale)
-        )
+        self.calc_node_width
         res: list[SVG] = [None] * len(states)  # type: ignore
         for n_it, state in enumerate(states):
             for v in G.nodes:
@@ -342,7 +386,9 @@ class SimulationWithChangingWidthDrawable(
                             "label": _format_vertex_resource_for_simulation_display(
                                 cast(AnyFloat, state["states"][[v]])
                             ),
-                            "width": calc_node_width(cast(float, state["states"][[v]])),
+                            "width": self.calc_node_width(
+                                cast(float, state["states"][[v]])
+                            ),
                             "fillcolor": (
                                 "#f0fff4"
                                 if (
@@ -356,8 +402,6 @@ class SimulationWithChangingWidthDrawable(
                         },
                         "right",
                     )
-            # for u, v, d in G.edges(data=True):
-            #     d["label"] = d["weight"]
             res[n_it] = SVG(nx.nx_pydot.to_pydot(G).create_svg())
         return res
 

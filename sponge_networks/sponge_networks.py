@@ -296,7 +296,9 @@ class SpongeNetwork(Generic[Node]):
     def plot_simulation(
         self,
         sim: StateArray[Node],
-        prop_setter: Optional[Callable[[nx.DiGraph], None]] = None,
+        prop_setter: Optional[
+            MaybeDrawablePropertySetterOrFn[SimulationWithChangingWidthContext]
+        ] = None,
         scale: float = 1.0,
     ) -> ipywidgets.interactive:
         return self.resource_network.plot_simulation(

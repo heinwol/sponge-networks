@@ -143,6 +143,14 @@ def all_equals(
     return True
 
 
+def do_multiple(*funcs: Callable[[], Any]) -> Callable[[], None]:
+    def inner() -> None:
+        for f in funcs:
+            f()
+
+    return inner
+
+
 class NeverError(BaseException):
     """
     You should never encounter this
