@@ -39,6 +39,7 @@
 
 # nix builds
 .result*
+/result
 
 ## custom
 !.vscode

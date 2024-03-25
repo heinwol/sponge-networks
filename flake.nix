@@ -1,4 +1,4 @@
-rec {
+{
   description = "";
 
   inputs = {
@@ -55,30 +55,23 @@ rec {
               '';
             }));
 
-          app = (poetry2nixLib.mkPoetryApplication poetryAttrs).overrideAttrs
+          sponge-networks = (poetry2nixLib.mkPoetryApplication poetryAttrs).overrideAttrs
             (oldAttrs: rec {
-              buildInputs = with pkgs;
+              buildInputs = (oldAttrs.buildInputs or [ ])
+                ++ (with pkgs;
                 buildInputs-base ++ [
 
-                ];
+                ]);
             });
-
-          sponge-networks = app;
-
         in
         {
           devShells = {
             default = devEnvPopulated;
           };
-          apps = {
-            default = sponge-networks;
-          };
-
           packages = {
             devEnv = devEnv;
+            default = sponge-networks;
           };
         };
     };
-
-
 }
